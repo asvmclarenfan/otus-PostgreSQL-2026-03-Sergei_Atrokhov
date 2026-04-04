@@ -1,1 +1,2 @@
-# otus-PostgreSQL-2026-03-Sergei_Atrokhov
+# Домашние задания курса OTUS.PostgreSQL для DBA и разработчиков
+# Группа 2026-03
