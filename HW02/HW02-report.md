@@ -518,12 +518,11 @@ postgres@asvpg:/usr/lib/postgresql/18/bin$
 * пароль пользователя postgres установлен ранее
 * прослушивание всех адресов
   * параметр статический, требует рестарта кластера БД
-  ```sh
+  ```
   postgres@asvpg:/usr/lib/postgresql/18/bin$ psql
 psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
 Type "help" for help.
-```
-```sh 
+``` 
 postgres=# show listen_addresses;
  listen_addresses 
 ------------------
@@ -548,3 +547,80 @@ postgres=# select name, setting, context from pg_settings where name = 'listen_a
 
 postgres=#
   ```
+
+###
+На уроке изменение выполнялось через конфиг файл postgresql.conf (в моем понимании - аналог PFILE в Oracle (текстовый файл; все изменения только через рестарт); читал, что изменения лучше вносить через auto.conf файл через команду ALTER SYSTEM (динамические параметры меняются через перечитывание конфигурации - pg_reload_conf()) - если это не так, просьба уточнить).
+В директории /etc/postgresql/18/main нет файла auto.conf..
+###
+
+* редактирование конфиг файла pg_hba.conf
+  * добавляем строку для подключений с любого IP к любой БД (в рамках тестового окружения)
+```sh
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            scram-sha-256
+host all all 0.0.0.0/0 scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+postgres@asvpg:/etc/postgresql/18/main$
+```
+
+###
+По курсу хотелось бы подробнее услышать пояснения насчет назначения и содержимого данного конфиг файла, best practices по его настройке.
+###
+
+###
+Просмотр установленных директорий конфиг файлов и директории данных и логов:
+###
+
+```sh
+postgres=# show config_file;
+               config_file               
+-----------------------------------------
+ /etc/postgresql/18/main/postgresql.conf
+(1 row)
+
+postgres=# show hba_file;
+              hba_file               
+-------------------------------------
+ /etc/postgresql/18/main/pg_hba.conf
+(1 row)
+
+
+postgres=# show data_directory;
+       data_directory        
+-----------------------------
+ /var/lib/postgresql/18/main
+(1 row)
+
+postgres=# show log_directory;
+ log_directory 
+---------------
+ log
+(1 row)
+
+postgres=#
+```
+
+###
+Рестарт кластера БД и проверка:
+###
+
+```sh
+postgres@asvpg:/etc/postgresql/18/main$ sudo pg_ctlcluster 18 main restart
+[sudo] password for postgres: 
+postgres@asvpg:/etc/postgresql/18/main$ 
+postgres@asvpg:/etc/postgresql/18/main$ ps auxf | grep postgres
+postgres   11384  0.2  0.4 233808 34516 ?        Ss   19:42   0:00 /usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/18/main -c config_file=/etc/postgresql/18/main/postgresql.conf
+postgres   11385  0.0  0.0 233808  7412 ?        Ss   19:42   0:00  \_ postgres: 18/main: io worker 0
+postgres   11386  0.0  0.0 233808  6748 ?        Ss   19:42   0:00  \_ postgres: 18/main: io worker 1
+postgres   11387  0.0  0.0 233808  6056 ?        Ss   19:42   0:00  \_ postgres: 18/main: io worker 2
+postgres   11388  0.0  0.0 233944  6216 ?        Ss   19:42   0:00  \_ postgres: 18/main: checkpointer 
+postgres   11389  0.0  0.0 233808  6208 ?        Ss   19:42   0:00  \_ postgres: 18/main: background writer 
+postgres   11391  0.0  0.0 233808  6248 ?        Ss   19:42   0:00  \_ postgres: 18/main: walwriter 
+postgres   11392  0.0  0.1 235392  9384 ?        Ss   19:42   0:00  \_ postgres: 18/main: autovacuum launcher 
+postgres   11393  0.0  0.1 235256  8668 ?        Ss   19:42   0:00  \_ postgres: 18/main: logical replication launcher 
+postgres@asvpg:/etc/postgresql/18/main$
+```
+
+
