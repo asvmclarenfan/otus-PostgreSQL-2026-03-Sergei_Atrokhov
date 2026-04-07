@@ -825,3 +825,25 @@ postgres=# select * from pg_indexes where tablename = 'tb_test';
 postgres=#
 ```
 
+###
+Вставим тестовые 3 строки, проверим содержимое таблицы запросом:
+###
+```sh
+postgres=# insert into tb_test (name) values ('Test1');
+INSERT 0 1
+postgres=# insert into tb_test (name) values ('Test2');
+INSERT 0 1
+postgres=# insert into tb_test (name) values ('Test3');
+INSERT 0 1
+postgres=# 
+postgres=# select * from tb_test;
+ id | name  |          now_date          
+----+-------+----------------------------
+  1 | Test1 | 2026-04-07 20:29:33.856426
+  2 | Test2 | 2026-04-07 20:29:54.009997
+  3 | Test3 | 2026-04-07 20:29:58.012175
+(3 rows)
+
+postgres=#
+```
+
