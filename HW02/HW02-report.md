@@ -517,13 +517,13 @@ postgres@asvpg:/usr/lib/postgresql/18/bin$
 
 * пароль пользователя postgres установлен ранее
 * прослушивание всех адресов
-  * параметр статический, трпебует рестарта кластера БД
+  * параметр статический, требует рестарта кластера БД
   ```sh
   postgres@asvpg:/usr/lib/postgresql/18/bin$ psql
 psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
 Type "help" for help.
 ```
-```sql
+```sh 
 postgres=# show listen_addresses;
  listen_addresses 
 ------------------
