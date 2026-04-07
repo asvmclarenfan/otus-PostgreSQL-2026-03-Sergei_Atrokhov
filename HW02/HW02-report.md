@@ -893,5 +893,5 @@ C:\Users\asus>
 ###
 Создаем подключение к БД через DBeaver и проверяем наличие таблицы с данными:
 ###
+<img width="1854" height="1238" alt="hw02_2026-04-07 223015" src="https://github.com/user-attachments/assets/aee80c61-214d-4bfb-b2b3-7431dc06258d" />
 
-! [](file_name.png)
