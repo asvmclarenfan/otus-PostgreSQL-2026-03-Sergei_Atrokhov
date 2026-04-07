@@ -515,5 +515,35 @@ postgres@asvpg:/usr/lib/postgresql/18/bin$
 Постустановочные настройки
 ##
 
-* пароль пользователя postgres устаноавлен ранее
-* 
+* пароль пользователя postgres установлен ранее
+* прослушивание всех адресов
+  * параметр статический, трпебует рестарта кластера БД
+  ```sql
+  postgres@asvpg:/usr/lib/postgresql/18/bin$ psql
+psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
+Type "help" for help.
+
+postgres=# show listen_addresses;
+ listen_addresses 
+------------------
+ localhost
+(1 row)
+
+postgres=# alter system set listen_addresses = '*';
+ALTER SYSTEM
+postgres=# 
+postgres=# show listen_addresses;
+ listen_addresses 
+------------------
+ localhost
+(1 row)
+
+
+postgres=# select name, setting, context from pg_settings where name = 'listen_addresses';
+       name       |  setting  |  context   
+------------------+-----------+------------
+ listen_addresses | localhost | postmaster
+(1 row)
+
+postgres=#
+  ```
