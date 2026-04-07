@@ -261,7 +261,192 @@ asvpg@asvpg:/etc/postgresql$
 ```
 
 ###
-Устанавливаем бинарники 18 версии:
+Устанавливаем бинарники 18 версии: помимо самого сервера БД, устанавливаем клиентские утилиты для взаимодействия с сервером БД, а также дополнительные расширения. Судя по логу установки, владельцем бинарников является пользователь postgres; локаль и кодировка - юникод (UTF8):
 ###
 
+```sh
+asvpg@asvpg:/etc/postgresql$ sudo apt install -y postgresql-18 postgresql-client-18 postgresql-contrib
+[sudo] password for asvpg: 
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libpq5 liburing2 postgresql-16 postgresql-18-jit postgresql-client-16 postgresql-client-common postgresql-common
+Suggested packages:
+  libpq-oauth postgresql-doc-16 postgresql-doc-18
+The following NEW packages will be installed:
+  libpq5 liburing2 postgresql-16 postgresql-18 postgresql-18-jit postgresql-client-16 postgresql-client-18 postgresql-contrib
+The following packages will be upgraded:
+  postgresql-client-common postgresql-common
+2 upgraded, 8 newly installed, 0 to remove and 224 not upgraded.
+Need to get 38.2 MB of archives.
+After this operation, 140 MB of additional disk space will be used.
+Get:1 http://ru.archive.ubuntu.com/ubuntu noble/main amd64 liburing2 amd64 2.5-1build1 [21.1 kB]
+Get:2 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-common all 290.pgdg24.04+1 [113 kB]
+Get:3 http://ru.archive.ubuntu.com/ubuntu noble-updates/main amd64 postgresql-contrib all 16+257build1.1 [11.6 kB]                          
+Get:4 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-common all 290.pgdg24.04+1 [48.1 kB]                 
+Get:5 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 libpq5 amd64 18.3-1.pgdg24.04+1 [255 kB]                               
+Get:6 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-16 amd64 16.13-1.pgdg24.04+1 [1,929 kB]              
+Get:7 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-16 amd64 16.13-1.pgdg24.04+1 [16.4 MB]                      
+Get:8 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-18 amd64 18.3-1.pgdg24.04+1 [2,086 kB]               
+Get:9 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-18 amd64 18.3-1.pgdg24.04+1 [7,527 kB]                      
+Get:10 https://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-18-jit amd64 18.3-1.pgdg24.04+1 [9,867 kB]                 
+Fetched 38.2 MB in 3min 43s (172 kB/s)                                                                                                      
+Preconfiguring packages ...
+(Reading database ... 150824 files and directories currently installed.)
+Preparing to unpack .../0-postgresql-common_290.pgdg24.04+1_all.deb ...
+Leaving 'diversion of /usr/bin/pg_config to /usr/bin/pg_config.libpq-dev by postgresql-common'
+Unpacking postgresql-common (290.pgdg24.04+1) over (257build1.1) ...
+Preparing to unpack .../1-postgresql-client-common_290.pgdg24.04+1_all.deb ...
+Unpacking postgresql-client-common (290.pgdg24.04+1) over (257build1.1) ...
+Selecting previously unselected package libpq5:amd64.
+Preparing to unpack .../2-libpq5_18.3-1.pgdg24.04+1_amd64.deb ...
+Unpacking libpq5:amd64 (18.3-1.pgdg24.04+1) ...
+Selecting previously unselected package liburing2:amd64.
+Preparing to unpack .../3-liburing2_2.5-1build1_amd64.deb ...
+Unpacking liburing2:amd64 (2.5-1build1) ...
+Selecting previously unselected package postgresql-client-16.
+Preparing to unpack .../4-postgresql-client-16_16.13-1.pgdg24.04+1_amd64.deb ...
+Unpacking postgresql-client-16 (16.13-1.pgdg24.04+1) ...
+Selecting previously unselected package postgresql-16.
+Preparing to unpack .../5-postgresql-16_16.13-1.pgdg24.04+1_amd64.deb ...
+Unpacking postgresql-16 (16.13-1.pgdg24.04+1) ...
+Selecting previously unselected package postgresql-client-18.
+Preparing to unpack .../6-postgresql-client-18_18.3-1.pgdg24.04+1_amd64.deb ...
+Unpacking postgresql-client-18 (18.3-1.pgdg24.04+1) ...
+Selecting previously unselected package postgresql-18.
+Preparing to unpack .../7-postgresql-18_18.3-1.pgdg24.04+1_amd64.deb ...
+Unpacking postgresql-18 (18.3-1.pgdg24.04+1) ...
+Selecting previously unselected package postgresql-18-jit.
+Preparing to unpack .../8-postgresql-18-jit_18.3-1.pgdg24.04+1_amd64.deb ...
+Unpacking postgresql-18-jit (18.3-1.pgdg24.04+1) ...
+Selecting previously unselected package postgresql-contrib.
+Preparing to unpack .../9-postgresql-contrib_16+257build1.1_all.deb ...
+Unpacking postgresql-contrib (16+257build1.1) ...
+Setting up postgresql-client-common (290.pgdg24.04+1) ...
+Removing obsolete conffile /etc/postgresql-common/supported_versions ...
+Setting up libpq5:amd64 (18.3-1.pgdg24.04+1) ...
+Setting up postgresql-common (290.pgdg24.04+1) ...
+Installing new version of config file /etc/postgresql-common/pg_upgradecluster.d/analyze ...
+Replacing config file /etc/postgresql-common/createcluster.conf with new version
+Setting up liburing2:amd64 (2.5-1build1) ...
+Setting up postgresql-client-18 (18.3-1.pgdg24.04+1) ...
+update-alternatives: using /usr/share/postgresql/18/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up postgresql-client-16 (16.13-1.pgdg24.04+1) ...
+Setting up postgresql-18 (18.3-1.pgdg24.04+1) ...
+Creating new PostgreSQL cluster 18/main ...
+/usr/lib/postgresql/18/bin/initdb -D /var/lib/postgresql/18/main --auth-local peer --auth-host scram-sha-256 --no-instructions
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
 
+The database cluster will be initialized with locale "en_US.UTF-8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are enabled.
+
+fixing permissions on existing directory /var/lib/postgresql/18/main ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... Europe/Moscow
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+Setting up postgresql-18-jit (18.3-1.pgdg24.04+1) ...
+Setting up postgresql-16 (16.13-1.pgdg24.04+1) ...
+Setting up postgresql-contrib (16+257build1.1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.6) ...
+asvpg@asvpg:/etc/postgresql$
+```
+
+###
+Проверяем созданные директории:
+###
+###
+Директория файлов конфигурации:
+###
+```sh
+asvpg@asvpg:/etc/postgresql/18/main$ pwd
+/etc/postgresql/18/main
+asvpg@asvpg:/etc/postgresql/18/main$ ls -altr
+total 68
+drwxr-xr-x 3 postgres postgres  4096 Apr  7 18:22 ..
+-rw-r--r-- 1 postgres postgres   317 Apr  7 18:22 start.conf
+-rw-r--r-- 1 postgres postgres   143 Apr  7 18:22 pg_ctl.conf
+-rw-r----- 1 postgres postgres  2681 Apr  7 18:22 pg_ident.conf
+-rw-r----- 1 postgres postgres  5934 Apr  7 18:22 pg_hba.conf
+-rw-r--r-- 1 postgres postgres   315 Apr  7 18:22 environment
+drwxr-xr-x 2 postgres postgres  4096 Apr  7 18:22 conf.d
+-rw-r--r-- 1 postgres postgres 32755 Apr  7 18:22 postgresql.conf
+drwxr-xr-x 3 postgres postgres  4096 Apr  7 18:22 .
+asvpg@asvpg:/etc/postgresql/18/main$
+```
+
+###
+Директория данных (права есть только у пользователя postgres):
+###
+```sh
+asvpg@asvpg:/var/lib/postgresql/18$ pwd
+/var/lib/postgresql/18
+asvpg@asvpg:/var/lib/postgresql/18$ ls -altr
+total 12
+drwxr-xr-x  3 postgres postgres 4096 Apr  7 18:22 ..
+drwxr-xr-x  3 postgres postgres 4096 Apr  7 18:22 .
+drwx------ 19 postgres postgres 4096 Apr  7 18:22 main
+asvpg@asvpg:/var/lib/postgresql/18$
+
+asvpg@asvpg:/var/lib/postgresql/18$ su - postgres
+Password: 
+postgres@asvpg:~$ cd /var/lib/postgresql/18/main/
+postgres@asvpg:/var/lib/postgresql/18/main$ ls -altr
+total 92
+drwxr-xr-x  3 postgres postgres 4096 Apr  7 18:22 ..
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_twophase
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_tblspc
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_stat_tmp
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_snapshots
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_serial
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_replslot
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_notify
+drwx------  4 postgres postgres 4096 Apr  7 18:22 pg_multixact
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_dynshmem
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_commit_ts
+-rw-------  1 postgres postgres    3 Apr  7 18:22 PG_VERSION
+-rw-------  1 postgres postgres   88 Apr  7 18:22 postgresql.auto.conf
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_xact
+drwx------  4 postgres postgres 4096 Apr  7 18:22 pg_wal
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_subtrans
+drwx------  5 postgres postgres 4096 Apr  7 18:22 base
+drwx------ 19 postgres postgres 4096 Apr  7 18:22 .
+-rw-------  1 postgres postgres  130 Apr  7 18:22 postmaster.opts
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_stat
+-rw-------  1 postgres postgres  108 Apr  7 18:22 postmaster.pid
+drwx------  2 postgres postgres 4096 Apr  7 18:25 global
+drwx------  4 postgres postgres 4096 Apr  7 18:27 pg_logical
+postgres@asvpg:/var/lib/postgresql/18/main$
+```
+
+###
+Директория логов:
+###
+```sh
+postgres@asvpg:/var/log/postgresql$ pwd
+/var/log/postgresql
+postgres@asvpg:/var/log/postgresql$ ls -altr
+total 12
+drwxrwxr-x 17 root     syslog   4096 Apr  7 16:21 ..
+drwxrwxr-t  2 root     postgres 4096 Apr  7 18:22 .
+-rw-r-----  1 postgres postgres  941 Apr  7 18:27 postgresql-18-main.log
+postgres@asvpg:/var/log/postgresql$
+```
+
+###
+Директория бинарников (исполняемых файлов):
+###
+```sh
+
+```
