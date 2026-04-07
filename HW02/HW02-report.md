@@ -448,5 +448,72 @@ postgres@asvpg:/var/log/postgresql$
 Директория бинарников (исполняемых файлов):
 ###
 ```sh
+postgres@asvpg:/var/log/postgresql$ cd /usr/lib/postgresql/18/bin
+postgres@asvpg:/usr/lib/postgresql/18/bin$ ls -altr
+total 15396
+-rwxr-xr-x 1 root root    39592 Feb 24 14:48 vacuumlo
+-rwxr-xr-x 1 root root    93624 Feb 24 14:48 vacuumdb
+-rwxr-xr-x 1 root root    89080 Feb 24 14:48 reindexdb
+-rwxr-xr-x 1 root root   958040 Feb 24 14:48 psql
+-rwxr-xr-x 1 root root 11413888 Feb 24 14:48 postgres
+-rwxr-xr-x 1 root root    47640 Feb 24 14:48 pg_walsummary
+-rwxr-xr-x 1 root root   105496 Feb 24 14:48 pg_waldump
+-rwxr-xr-x 1 root root   117536 Feb 24 14:48 pg_verifybackup
+-rwxr-xr-x 1 root root   188104 Feb 24 14:48 pg_upgrade
+-rwxr-xr-x 1 root root    31112 Feb 24 14:48 pg_test_timing
+-rwxr-xr-x 1 root root    39344 Feb 24 14:48 pg_test_fsync
+-rwxr-xr-x 1 root root   117688 Feb 24 14:48 pg_rewind
+-rwxr-xr-x 1 root root   204864 Feb 24 14:48 pg_restore
+-rwxr-xr-x 1 root root    60200 Feb 24 14:48 pg_resetwal
+-rwxr-xr-x 1 root root    56504 Feb 24 14:48 pg_recvlogical
+-rwxr-xr-x 1 root root    93240 Feb 24 14:48 pg_receivewal
+-rwxr-xr-x 1 root root    35448 Feb 24 14:48 pg_isready
+-rwxr-xr-x 1 root root   123040 Feb 24 14:48 pg_dumpall
+-rwxr-xr-x 1 root root   467824 Feb 24 14:48 pg_dump
+-rwxr-xr-x 1 root root    68360 Feb 24 14:48 pg_ctl
+-rwxr-xr-x 1 root root    84936 Feb 24 14:48 pg_createsubscriber
+-rwxr-xr-x 1 root root    51624 Feb 24 14:48 pg_controldata
+-rwxr-xr-x 1 root root    39304 Feb 24 14:48 pg_config
+-rwxr-xr-x 1 root root   134040 Feb 24 14:48 pg_combinebackup
+-rwxr-xr-x 1 root root    56056 Feb 24 14:48 pg_checksums
+-rwxr-xr-x 1 root root   167768 Feb 24 14:48 pgbench
+-rwxr-xr-x 1 root root   138816 Feb 24 14:48 pg_basebackup
+-rwxr-xr-x 1 root root    39400 Feb 24 14:48 pg_archivecleanup
+-rwxr-xr-x 1 root root   106072 Feb 24 14:48 pg_amcheck
+-rwxr-xr-x 1 root root    43400 Feb 24 14:48 oid2name
+-rwxr-xr-x 1 root root   122592 Feb 24 14:48 initdb
+-rwxr-xr-x 1 root root    68280 Feb 24 14:48 dropuser
+-rwxr-xr-x 1 root root    68344 Feb 24 14:48 dropdb
+-rwxr-xr-x 1 root root    81240 Feb 24 14:48 createuser
+-rwxr-xr-x 1 root root    76824 Feb 24 14:48 createdb
+-rwxr-xr-x 1 root root    80696 Feb 24 14:48 clusterdb
+drwxr-xr-x 4 root root     4096 Apr  7 18:21 ..
+drwxr-xr-x 2 root root     4096 Apr  7 18:21 .
+postgres@asvpg:/usr/lib/postgresql/18/bin$
+```
+
+###
+По умолчанию запущен автостарт процессов postgres; проверяем, что экземпляр работает:
+###
+```sh
+postgres@asvpg:/usr/lib/postgresql/18/bin$ ps auxf | grep postgres
+
+postgres    9877  0.0  0.4 233808 34552 ?        Ss   18:22   0:00 /usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/18/main -c config_file=/etc/postgresql/18/main/postgresql.conf
+postgres    9878  0.0  0.1 233940  8620 ?        Ss   18:22   0:00  \_ postgres: 18/main: io worker 0
+postgres    9879  0.0  0.0 233940  6908 ?        Ss   18:22   0:00  \_ postgres: 18/main: io worker 1
+postgres    9880  0.0  0.0 233808  6336 ?        Ss   18:22   0:00  \_ postgres: 18/main: io worker 2
+postgres    9881  0.0  0.1 233940 10520 ?        Ss   18:22   0:00  \_ postgres: 18/main: checkpointer 
+postgres    9882  0.0  0.0 233968  7868 ?        Ss   18:22   0:00  \_ postgres: 18/main: background writer 
+postgres    9884  0.0  0.1 233944 10816 ?        Ss   18:22   0:00  \_ postgres: 18/main: walwriter 
+postgres    9885  0.0  0.1 235396  9732 ?        Ss   18:22   0:00  \_ postgres: 18/main: autovacuum launcher 
+postgres    9886  0.0  0.1 235260  8856 ?        Ss   18:22   0:00  \_ postgres: 18/main: logical replication launcher 
+postgres@asvpg:/usr/lib/postgresql/18/bin$ 
 
 ```
+
+##
+Постустановочные настройки
+##
+
+* пароль пользователя postgres устаноавлен ранее
+* 
