@@ -220,4 +220,48 @@ Have a look at https://wiki.postgresql.org/wiki/Apt for more information;
 most notably the FAQ at https://wiki.postgresql.org/wiki/Apt/FAQ
 asvpg@asvpg:/home$
 ```
+###
+Здесь было бы интересно узнать более подробно про установку пакетов
+###
+
+
+###
+Проверяем, что директория postgresql имеет владельцем пользователя postgres:
+###
+
+```sh
+asvpg@asvpg:/etc$ ls -altr | grep postgresql
+drwxr-xr-x   2 postgres             postgres              4096 Aug  9  2024 postgresql
+drwxr-xr-x   3 root                 root                  4096 Apr  7 16:21 postgresql-common
+asvpg@asvpg:/etc$
+```
+
+###
+Проверяем, что кроме пакетов никаких бинарников и процессов PostgreSQL нет:
+###
+
+```sh
+svpg@asvpg:/etc$ cd /var/lib/postgresql/
+asvpg@asvpg:/var/lib/postgresql$ ls -altr
+total 8
+drwxr-xr-x 70 root     root     4096 Apr  7 16:08 ..
+drwxr-xr-x  2 postgres postgres 4096 Apr  7 16:08 .
+asvpg@asvpg:/var/lib/postgresql$ cd /etc/postgresql
+asvpg@asvpg:/etc/postgresql$ ls -altr
+total 16
+drwxr-xr-x   2 postgres postgres  4096 Aug  9  2024 .
+drwxr-xr-x 140 root     root     12288 Apr  7 16:21 ..
+asvpg@asvpg:/etc/postgresql$ ls -altr /usr/lib
+lib/     lib64/   libexec/ 
+asvpg@asvpg:/etc/postgresql$ ls -altr | grep /usr/lib/postgresql
+asvpg@asvpg:/etc/postgresql$ 
+asvpg@asvpg:/etc/postgresql$ ps auxf | grep postgres
+asvpg       6323  0.0  0.0   9144  2268 pts/0    S+   16:36   0:00          \_ grep --color=auto postgres
+asvpg@asvpg:/etc/postgresql$
+```
+
+###
+Устанавливаем бинарники 18 версии:
+###
+
 
