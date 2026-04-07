@@ -546,21 +546,56 @@ postgres=# select name, setting, context from pg_settings where name = 'listen_a
 (1 row)
 
 postgres=#
-  ```
 
+  ```
+* меняем порт на 5433
+```sh
+postgres=# alter system set port = 5433;
+ALTER SYSTEM
+postgres=#
+```
 ###
 На уроке изменение выполнялось через конфиг файл postgresql.conf (в моем понимании - аналог PFILE в Oracle (текстовый файл; все изменения только через рестарт); читал, что изменения лучше вносить через auto.conf файл через команду ALTER SYSTEM (динамические параметры меняются через перечитывание конфигурации - pg_reload_conf()) - если это не так, просьба уточнить).
-В директории /etc/postgresql/18/main нет файла auto.conf..
+В директории /etc/postgresql/18/main нет файла auto.conf, он находится в директории с данными:
 ###
-
+```sh
+postgres@asvpg:/var/lib/postgresql/18/main$ pwd
+/var/lib/postgresql/18/main
+postgres@asvpg:/var/lib/postgresql/18/main$ ls -altr
+total 92
+drwxr-xr-x  3 postgres postgres 4096 Apr  7 18:22 ..
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_twophase
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_tblspc
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_stat_tmp
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_snapshots
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_serial
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_replslot
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_notify
+drwx------  4 postgres postgres 4096 Apr  7 18:22 pg_multixact
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_dynshmem
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_commit_ts
+-rw-------  1 postgres postgres    3 Apr  7 18:22 PG_VERSION
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_xact
+drwx------  4 postgres postgres 4096 Apr  7 18:22 pg_wal
+drwx------  2 postgres postgres 4096 Apr  7 18:22 pg_subtrans
+drwx------  5 postgres postgres 4096 Apr  7 18:22 base
+-rw-------  1 postgres postgres  111 Apr  7 19:20 postgresql.auto.conf
+drwx------  4 postgres postgres 4096 Apr  7 19:42 pg_logical
+drwx------ 19 postgres postgres 4096 Apr  7 19:42 .
+-rw-------  1 postgres postgres  130 Apr  7 19:42 postmaster.opts
+drwx------  2 postgres postgres 4096 Apr  7 19:42 pg_stat
+-rw-------  1 postgres postgres  101 Apr  7 19:42 postmaster.pid
+drwx------  2 postgres postgres 4096 Apr  7 19:43 global
+postgres@asvpg:/var/lib/postgresql/18/main$
+```
 * редактирование конфиг файла pg_hba.conf
   * добавляем строку для подключений с любого IP к любой БД (в рамках тестового окружения)
 ```sh
 # Allow replication connections from localhost, by a user with the
 # replication privilege.
+host all all 0.0.0.0/0 scram-sha-256
 local   replication     all                                     peer
 host    replication     all             127.0.0.1/32            scram-sha-256
-host all all 0.0.0.0/0 scram-sha-256
 host    replication     all             ::1/128                 scram-sha-256
 postgres@asvpg:/etc/postgresql/18/main$
 ```
@@ -623,4 +658,95 @@ postgres   11393  0.0  0.1 235256  8668 ?        Ss   19:42   0:00  \_ postgres:
 postgres@asvpg:/etc/postgresql/18/main$
 ```
 
+###
+Проверка изменения параметра listen_addresses и port:
+###
+```sh
+postgres@asvpg:/etc/postgresql/18/main$ psql
+psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
+Type "help" for help.
+
+postgres=# show listen_addresses;
+ listen_addresses 
+------------------
+ *
+(1 row)
+
+postgres=#
+
+postgres=# show port;
+ port 
+------
+ 5433
+(1 row)
+
+postgres=#
+```
+
+* проверка имеющегося кластера БД (должен быть один main):
+```sh
+postgres@asvpg:/var/lib/postgresql/18/main$ pg_lsclusters 
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:/var/lib/postgresql/18/main$
+```
+
+* проверка подключения к БД под пользователем postgres (без аутентификации на уровне ОС):
+###
+ошибка пароля (ввожу пароль как на ОС)
+###
+```sh
+postgres@asvpg:/etc/postgresql/18/main$ psql -h localhost -p 5433
+Password for user postgres: 
+psql: error: connection to server at "localhost" (127.0.0.1), port 5433 failed: FATAL:  password authentication failed for user "postgres"
+connection to server at "localhost" (127.0.0.1), port 5433 failed: FATAL:  password authentication failed for user "postgres"
+```
+###
+Меняю пароль в БД для пользователя postgres:
+###
+```
+postgres@asvpg:/etc/postgresql/18/main$ psql
+psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
+Type "help" for help.
+
+postgres=# ALTER USER postgres WITH PASSWORD <pwd>;
+ALTER ROLE
+postgres=# exit
+```
+###
+Проверяем еще раз, теперь ошибки нет:
+###
+postgres@asvpg:/etc/postgresql/18/main$ psql -h localhost -p 5433
+Password for user postgres: 
+psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+postgres=# \conninfo
+            Connection Information
+      Parameter       |         Value          
+----------------------+------------------------
+ Database             | postgres
+ Client User          | postgres
+ Host                 | localhost
+ Host Address         | 127.0.0.1
+ Server Port          | 5433
+ Options              | 
+ Protocol Version     | 3.0
+ Password Used        | true
+ GSSAPI Authenticated | false
+ Backend PID          | 11659
+ SSL Connection       | true
+ SSL Library          | OpenSSL
+ SSL Protocol         | TLSv1.3
+ SSL Key Bits         | 256
+ SSL Cipher           | TLS_AES_256_GCM_SHA384
+ SSL Compression      | false
+ ALPN                 | postgresql
+ Superuser            | on
+ Hot Standby          | off
+(19 rows)
+
+postgres=#
+```
 
