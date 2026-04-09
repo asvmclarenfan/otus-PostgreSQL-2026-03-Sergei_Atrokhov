@@ -1325,5 +1325,195 @@ asvpg@asvpg:~$
 Загрузка образа на хост:
 ###
 ```sh
-
+asvpg@asvpg:~$ docker pull postgres:18
+18: Pulling from library/postgres
+464872ed796d: Download complete 
+f4deb76cb231: Download complete 
+484cf2ee784f: Download complete 
+7a79188b0f04: Downloading [==========================>                        ]  60.82MB/115.3MB
+b21c9fd89a08: Download complete 
+11c182969642: Download complete 
+eb4cdb4c077a: Download complete 
+fecac0093525: Download complete 
+2140605cc9e3: Download complete 
+5435b2dcdf5c: Downloading [===============>                                   ]  8.946MB/29.78MB
+8d02d282ee5a: Download complete 
+baf06005f9e9: Download complete 
+7cec73702fc3: Download complete 
+ffb2fc153481: Download complete 
+3f82016dd5ae: Download complete
+--очень медленная скорость с обрывом
+failed to copy: read tcp 192.168.1.6:53244->172.64.66.1:443: read: connection reset by peer
+asvpg@asvpg:~$ docker pull postgres:18
+18: Pulling from library/postgres
+464872ed796d: Download complete 
+f4deb76cb231: Pull complete 
+fecac0093525: Pull complete 
+7cec73702fc3: Pull complete 
+5435b2dcdf5c: Pull complete 
+eb4cdb4c077a: Pull complete 
+baf06005f9e9: Pull complete 
+8d02d282ee5a: Download complete 
+484cf2ee784f: Download complete 
+7a79188b0f04: Downloading [==>                                                ]  6.291MB/115.3MB
+7a79188b0f04: Downloading [===>                                               ]  7.422MB/115.3MB
+b21c9fd89a08: Download complete 
+2140605cc9e3: Pull complete 
+ffb2fc153481: Download complete 
+3f82016dd5ae: Downloading [========>                                          ]  1.049MB/5.957MB
+3f82016dd5ae: Downloading [==============>                                    ]  1.671MB/5.957MB
+failed to copy: read tcp 192.168.1.6:46358->172.64.66.1:443: read: connection reset by peer
+asvpg@asvpg:~$ 
 ```
+
+###
+с третьей попытки получилось (ушло около 2.5 часов)
+###
+```sh
+asvpg@asvpg:~$ docker pull postgres:18
+18: Pulling from library/postgres
+464872ed796d: Pull complete 
+5435b2dcdf5c: Pull complete 
+fecac0093525: Pull complete 
+7a79188b0f04: Pull complete 
+eb4cdb4c077a: Pull complete 
+7cec73702fc3: Pull complete 
+484cf2ee784f: Pull complete 
+f4deb76cb231: Pull complete 
+baf06005f9e9: Pull complete 
+11c182969642: Pull complete 
+8d02d282ee5a: Pull complete 
+b21c9fd89a08: Pull complete 
+2140605cc9e3: Pull complete 
+ffb2fc153481: Download complete 
+3f82016dd5ae: Download complete 
+Digest: sha256:52e6ffd11fddd081ae63880b635b2a61c14008c17fc98cdc7ce5472265516dd0
+Status: Downloaded newer image for postgres:18
+docker.io/library/postgres:18
+asvpg@asvpg:~$
+```
+
+###
+проверяем наличие образа:
+###
+
+```sh
+asvpg@asvpg:~$ docker images
+                                                                                             i Info →   U  In Use
+IMAGE         ID             DISK USAGE   CONTENT SIZE   EXTRA
+postgres:18   52e6ffd11fdd        649MB          168MB        
+asvpg@asvpg:~$
+```
+
+###
+Проверяем, что без пароля будет ошибка:
+###
+```sh
+asvpg@asvpg:~$ docker run postgres:18
+Error: Database is uninitialized and superuser password is not specified.
+       You must specify POSTGRES_PASSWORD to a non-empty value for the
+       superuser. For example, "-e POSTGRES_PASSWORD=password" on "docker run".
+
+       You may also use "POSTGRES_HOST_AUTH_METHOD=trust" to allow all
+       connections without a password. This is *not* recommended.
+
+       See PostgreSQL documentation about "trust":
+       https://www.postgresql.org/docs/current/auth-trust.html
+asvpg@asvpg:~$
+```
+
+###
+Каталог /var/lib/postgresql уже ранее создан, принадлежит пользователю postgres
+###
+```sh
+asvpg@asvpg:/var/lib$ ls -altr /var/lib/postgres
+ls: cannot access '/var/lib/postgres': No such file or directory
+asvpg@asvpg:/var/lib$
+
+drwxr-xr-x  3 postgres             postgres             4096 Apr  7 18:22 postgresql
+```
+
+###
+Получается, создаем другой каталог /var/lib/pg_docker
+###
+```sh
+asvpg@asvpg:/var/lib$ sudo mkdir -p /var/lib/pg_docker
+[sudo] password for asvpg: 
+asvpg@asvpg:/var/lib$ ls -altr /var/lib/pg_docker
+total 8
+drwxr-xr-x 74 root root 4096 Apr  9 15:16 ..
+drwxr-xr-x  2 root root 4096 Apr  9 15:16 .
+asvpg@asvpg:/var/lib$
+
+drwxr-xr-x  2 root                 root                 4096 Apr  9 15:16 pg_docker
+```
+
+###
+Запускаем контейнер с проброской порта 5432 для внешнего подключения:
+###
+```sh
+asvpg@asvpg:/var/lib$ docker run --rm -d \
+        --name postgres18 \
+        -e POSTGRES_PASSWORD=123 \
+        -p 5432:5432 \
+        -v /var/lib/pg_docker:/var/lib/postgresql/18/docker \
+        postgres:18
+19c467b015296465a49fcf7fd4f0d545c6f40ddcbbdc8348666786c2708cc52e
+asvpg@asvpg:/var/lib$
+```
+
+###
+Проверяем наличие активного контейнера:
+###
+```sh
+asvpg@asvpg:/var/lib$ docker ps
+CONTAINER ID   IMAGE         COMMAND                  CREATED          STATUS          PORTS                                         NAMES
+19c467b01529   postgres:18   "docker-entrypoint.s…"   41 seconds ago   Up 41 seconds   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp   postgres18
+asvpg@asvpg:/var/lib$
+```
+
+###
+Заходим в контейнер в режиме терминала, создаем новую БД, новую таблицу с 1 строкой:
+###
+```sh
+asvpg@asvpg:/var/lib$ docker exec -it postgres18 bash
+root@19c467b01529:/# su postgres
+postgres@19c467b01529:/$ psql
+psql (18.3 (Debian 18.3-1.pgdg13+1))
+Type "help" for help.
+
+postgres=# \conninfo
+           Connection Information
+      Parameter       |        Value        
+----------------------+---------------------
+ Database             | postgres
+ Client User          | postgres
+ Socket Directory     | /var/run/postgresql
+ Server Port          | 5432
+ Options              | 
+ Protocol Version     | 3.0
+ Password Used        | false
+ GSSAPI Authenticated | false
+ Backend PID          | 89
+ SSL Connection       | false
+ Superuser            | on
+ Hot Standby          | off
+(12 rows)
+
+postgres=# create database test_docker;
+CREATE DATABASE
+postgres=# \c test_docker;
+You are now connected to database "test_docker" as user "postgres".
+test_docker=# create table test_docker (id int, name text);
+CREATE TABLE
+test_docker=# insert into test_docker values(1, 'test');
+INSERT 0 1
+test_docker=# select * from test_docker;
+ id | name 
+----+------
+  1 | test
+(1 row)
+
+test_docker=# 
+```
+
