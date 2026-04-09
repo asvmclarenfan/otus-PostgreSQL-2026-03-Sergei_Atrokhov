@@ -1463,6 +1463,42 @@ asvpg@asvpg:/var/lib$
 ```
 
 ###
+ВОПРОС: получается, все файлы находятся в /var/lib/pg_docker. Для чего тогда /var/lib/postgresql/18/docker?
+###
+```sh
+root@asvpg:~# cd /var/lib/pg_docker/
+root@asvpg:/var/lib/pg_docker# ls -altr
+total 136
+drwxr-xr-x 74 root    root             4096 Apr  9 15:16 ..
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_twophase
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_tblspc
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_stat_tmp
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_snapshots
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_serial
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_replslot
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_notify
+drwx------  4 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_multixact
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_dynshmem
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_commit_ts
+-rw-------  1 dnsmasq systemd-journal     3 Apr  9 15:20 PG_VERSION
+-rw-------  1 dnsmasq systemd-journal 32557 Apr  9 15:20 postgresql.conf
+-rw-------  1 dnsmasq systemd-journal    88 Apr  9 15:20 postgresql.auto.conf
+-rw-------  1 dnsmasq systemd-journal  2681 Apr  9 15:20 pg_ident.conf
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_xact
+drwx------  4 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_wal
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_subtrans
+-rw-------  1 dnsmasq systemd-journal  5753 Apr  9 15:20 pg_hba.conf
+drwx------ 19 dnsmasq root             4096 Apr  9 15:20 .
+-rw-------  1 dnsmasq systemd-journal    36 Apr  9 15:20 postmaster.opts
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:20 pg_stat
+-rw-------  1 dnsmasq systemd-journal    99 Apr  9 15:20 postmaster.pid
+drwx------  6 dnsmasq systemd-journal  4096 Apr  9 15:23 base
+drwx------  2 dnsmasq systemd-journal  4096 Apr  9 15:23 global
+drwx------  4 dnsmasq systemd-journal  4096 Apr  9 15:25 pg_logical
+root@asvpg:/var/lib/pg_docker#
+```
+
+###
 Проверяем наличие активного контейнера:
 ###
 ```sh
@@ -1515,5 +1551,140 @@ test_docker=# select * from test_docker;
 (1 row)
 
 test_docker=# 
+```
+
+###
+При попытке создать внешнее подключение через DBeaver, получаю таймаут..неправильно определяю IP (172.18.0.1)?
+###
+
+```sh
+asvpg@asvpg:~$ ip addr
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host noprefixroute 
+       valid_lft forever preferred_lft forever
+2: enp0s3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 08:00:27:27:04:67 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.6/24 brd 192.168.1.255 scope global dynamic noprefixroute enp0s3
+       valid_lft 73367sec preferred_lft 73367sec
+    inet6 fe80::a00:27ff:fe27:467/64 scope link 
+       valid_lft forever preferred_lft forever
+3: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default 
+    link/ether aa:99:57:2f:60:f4 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::a899:57ff:fe2f:60f4/64 scope link 
+       valid_lft forever preferred_lft forever
+10: br-deefc43700c9: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default 
+    link/ether 56:50:1a:0b:71:4b brd ff:ff:ff:ff:ff:ff
+    inet 172.18.0.1/16 brd 172.18.255.255 scope global br-deefc43700c9
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5450:1aff:fe0b:714b/64 scope link 
+       valid_lft forever preferred_lft forever
+11: veth483010c@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-deefc43700c9 state UP group default 
+    link/ether ee:90:93:fa:7c:2f brd ff:ff:ff:ff:ff:ff link-netnsid 0
+    inet6 fe80::ec90:93ff:fefa:7c2f/64 scope link 
+       valid_lft forever preferred_lft forever
+12: veth0448566@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-deefc43700c9 state UP group default 
+    link/ether b6:a1:68:1f:65:90 brd ff:ff:ff:ff:ff:ff link-netnsid 1
+    inet6 fe80::b4a1:68ff:fe1f:6590/64 scope link 
+       valid_lft forever preferred_lft forever
+asvpg@asvpg:~$
+```
+
+
+###
+Контейнеры друг друга не видят:
+###
+```sh
+asvpg@asvpg:/var/lib$ sudo docker run -it --rm --name pg-client postgres:18 \
+        psql -h postgres18 -U postgres
+[sudo] password for asvpg: 
+psql: error: could not translate host name "postgres18" to address: Name or service not known
+asvpg@asvpg:/var/lib$
+```
+
+###
+Останавливаю контейнер, он автоматически будет удален (опция rm -d):
+###
+```sh
+asvpg@asvpg:/var/lib$ docker stop postgres18
+postgres18
+asvpg@asvpg:/var/lib$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+asvpg@asvpg:/var/lib$
+```
+
+###
+Создаем общую сеть, но запустить сразу не можем, т.к. удалили контейнер postgresql18
+###
+
+```sh
+asvpg@asvpg:/var/lib$ sudo docker network create pg-net
+deefc43700c9709975d4739bd32820f0c468dc44f5489462dfdca5be06d30662
+asvpg@asvpg:/var/lib$ docker network connect pg-net postgres18
+Error response from daemon: No such container: postgres18
+asvpg@asvpg:/var/lib$
+```
+
+###
+Выполняем запуск:
+###
+```sh
+asvpg@asvpg:/var/lib$ docker run -d --rm \
+  --name postgres18 \
+  --network pg-net \
+  -e POSTGRES_PASSWORD=123 \
+  -v /var/lib/pg_docker:/var/lib/postgresql/18/docker \
+  -p 5432:5432 \
+  postgres:18
+a0bade20bd4921505fd88ce1ff98bf102b5392a48c7d271355a2e6196ce05cf5
+
+asvpg@asvpg:/var/lib$ docker ps
+CONTAINER ID   IMAGE         COMMAND                  CREATED         STATUS         PORTS                                         NAMES
+a0bade20bd49   postgres:18   "docker-entrypoint.s…"   8 seconds ago   Up 6 seconds   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp   postgres18
+asvpg@asvpg:/var/lib$
+```
+
+###
+Запускаем еще один контейнер в той же сети:
+###
+```sh
+asvpg@asvpg:/var/lib$ sudo docker run -it --rm \
+        --name pg-client \
+        --network pg-net \
+        postgres:18 \
+        psql -h postgres18 -U postgres
+Password for user postgres: 
+psql (18.3 (Debian 18.3-1.pgdg13+1))
+Type "help" for help.
+
+postgres=#
+```
+
+###
+Контейнеры видят друг друга; БД и таблица с данными на месте:
+###
+```sh
+postgres=# \c test_docker;
+You are now connected to database "test_docker" as user "postgres".
+test_docker=# select * from test_docker;
+ id | name 
+----+------
+  1 | test
+(1 row)
+
+test_docker=#
+```
+
+###
+ВОПРОС: В другом сеансе не смог проверить из-за блокировки. Что неправильно сделал?
+###
+```sh
+asvpg@asvpg:~$ docker ps
+permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+asvpg@asvpg:~$
 ```
 
