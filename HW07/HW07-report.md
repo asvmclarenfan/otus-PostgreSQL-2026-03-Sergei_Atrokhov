@@ -549,5 +549,17 @@ pgbenchtest=#
 ###
 Видим, что после включения автовакуума на рассматриваемую таблицу, через определенное время все мертвые строки были вычищены.
 К сожалению, поймать работу автовакуума во вью не успел.
-
+В логе СУБД также пусто, видимо нужно сильно уменьшать время работы автовакуума для логирования:
 ###
+```sh
+postgres@asvpg:/var/log/postgresql$ pwd
+/var/log/postgresql
+postgres@asvpg:/var/log/postgresql$ ls -altr
+total 44
+-rw-r-----  1 postgres postgres  5700 Apr 18 13:04 postgresql-18-main.log.2.gz
+drwxrwxr-t  2 root     postgres  4096 Apr 25 02:02 .
+-rw-r-----  1 postgres postgres 10954 Apr 25 02:02 postgresql-18-main.log.1
+drwxrwxr-x 17 root     syslog    4096 Apr 26 13:00 ..
+-rw-r-----  1 postgres postgres 13642 Apr 26 16:32 postgresql-18-main.log
+postgres@asvpg:/var/log/postgresql$
+```
