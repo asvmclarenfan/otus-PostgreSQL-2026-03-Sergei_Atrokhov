@@ -287,6 +287,7 @@ pgbenchtest=#
 do $$
 declare
    n_of_recs bigint := 1000000;
+   random_varchar_length int;
    random_varchar varchar(100);
    random_timestamp timestamp;
    query text;
@@ -304,15 +305,249 @@ begin
       -- some random timestamp between '2026-04-01 00:00:00' and '2026-04-26 00:00:00'
       random_timestamp := timestamp '2026-04-01 00:00:00' + random() * (timestamp '2026-04-26 00:00:00' - timestamp '2026-04-01 00:00:00');
 
-      query := 'insert into my_table values($1, $2, $3)';
+      query := 'insert into av_table values($1, $2)';
 
-      execute query using random_varchar, random_timestamp, random_int;
+      execute query using random_varchar, random_timestamp;
 
       if idx_rec % 100000 = 0 then
-         raise notice 'Num of recs inserted into the table my_table: %', idx_rec;
+         raise notice 'Num of recs inserted into the table av_table: %', idx_rec;
       end if;
 
    end loop;
 
 end$$;
+
+NOTICE:  Num of recs inserted into the table av_table: 100000
+NOTICE:  Num of recs inserted into the table av_table: 200000
+NOTICE:  Num of recs inserted into the table av_table: 300000
+NOTICE:  Num of recs inserted into the table av_table: 400000
+NOTICE:  Num of recs inserted into the table av_table: 500000
+NOTICE:  Num of recs inserted into the table av_table: 600000
+NOTICE:  Num of recs inserted into the table av_table: 700000
+NOTICE:  Num of recs inserted into the table av_table: 800000
+NOTICE:  Num of recs inserted into the table av_table: 900000
+NOTICE:  Num of recs inserted into the table av_table: 1000000
+DO
+pgbenchtest=#
 ```
+
+###
+Зафиксируйте размер таблицы (например, pg_total_relation_size) и значение n_dead_tup;
+###
+```sh
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |          0 |    1000000 | 2026-04-26 16:02:10.706123+03
+(1 row)
+
+pgbenchtest=# select pg_size_pretty(pg_relation_size('av_table'));
+ pg_size_pretty 
+----------------
+ 87 MB
+(1 row)
+
+pgbenchtest=#
+```
+
+###
+Выполните 5 полных обновлений строк (добавление символа к текстовому полю), затем зафиксируйте n_dead_tup, last_autovacuum и размер таблицы;
+###
+```sh
+pgbenchtest=# \d av_table
+                        Table "public.av_table"
+ Column |            Type             | Collation | Nullable | Default 
+--------+-----------------------------+-----------+----------+---------
+ v1     | character varying(100)      |           |          | 
+ t2     | timestamp without time zone |           |          | 
+
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+ERROR:  value too long for type character varying(100)
+
+--увеличим размерность столбца на 20 символов:
+pgbenchtest=# alter table av_table alter column v1 type varchar(120);
+ALTER TABLE
+pgbenchtest=# \d av_table
+                        Table "public.av_table"
+ Column |            Type             | Collation | Nullable | Default 
+--------+-----------------------------+-----------+----------+---------
+ v1     | character varying(120)      |           |          | 
+ t2     | timestamp without time zone |           |          | 
+
+pgbenchtest=#
+
+--повторим обновление всех строк таблицы:
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'A';
+UPDATE 1000000
+pgbenchtest=# 
+pgbenchtest=# select pg_size_pretty(pg_relation_size('av_table'));
+ pg_size_pretty 
+----------------
+ 408 MB
+(1 row)
+```
+
+###
+Дождитесь срабатывания autovacuum (периодически проверяя last_autovacuum) и зафиксируйте изменения n_dead_tup/размера;
+###
+```sh
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |     994615 |    1000000 | 2026-04-26 16:09:12.600891+03
+(1 row)
+
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |     994615 |    1000000 | 2026-04-26 16:09:12.600891+03
+(1 row)
+
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |          0 |    1000000 | 2026-04-26 16:10:12.434177+03
+(1 row)
+
+pgbenchtest=# select pg_size_pretty(pg_relation_size('av_table'));
+ pg_size_pretty 
+----------------
+ 408 MB
+(1 row)
+
+pgbenchtest=#
+```
+
+###
+Видим, что после срабатывания автовакуума мертвые версии строк удалены, при этом размер таблицы не уменьшен, т.е. имеется фрагментация с множеством дырок в блоках данных или в пустых блоках данных, за которыми нахоядтся другие блоки данных с данными.
+###
+
+###
+Отключите autovacuum только для этой таблицы, выполните 10 полных обновлений строк и снова зафиксируйте n_dead_tup и размер;
+###
+```sh
+pgbenchtest=# select relname, reloptions from pg_class where relname = 'av_table';
+ relname  | reloptions 
+----------+------------
+ av_table | 
+(1 row)
+
+pgbenchtest=# alter table av_table set (autovacuum_enabled=off);
+ALTER TABLE
+pgbenchtest=# select relname, reloptions from pg_class where relname = 'av_table';
+ relname  |        reloptions        
+----------+--------------------------
+ av_table | {autovacuum_enabled=off}
+(1 row)
+
+pgbenchtest=#
+
+--выполняем 10 полных обновлений строк для столбца v1:
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# update av_table set v1 = v1 || 'B';
+UPDATE 1000000
+pgbenchtest=# 
+pgbenchtest=# select pg_size_pretty(pg_relation_size('av_table'));
+ pg_size_pretty 
+----------------
+ 999 MB
+(1 row)
+
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |    9889646 |    1000000 | 2026-04-26 16:10:12.434177+03
+(1 row)
+
+pgbenchtest=# 
+```
+
+###
+Объясните наблюдения: почему растёт размер и/или число «мёртвых» строк при отключённом обслуживании;
+###
+####
+Вследствие отключенного автовакуума на рассматриваемую таблицу av_table, фоновый процесс autovacuum launcher не запускает свои воркеры для очистки, т.к. данная таблица исключается из рассмотрения критериев запуска автовакуума по числу и проценту мертвых строк (autovacuum_vacuum_scale_factor и autovacuum_vacuum_threshold). Во вью pg_stat_user_tables видим увеличение числа мертвых версий строк почти на 10 млн (тут вопрос, почему не ровно на 10 млн). Считаем это погрешностью вычислений.
+####
+
+###
+Процесс автовакуума не запущен:
+###
+```sh
+pgbenchtest=# select * from pg_stat_progress_vacuum \gx
+(0 rows)
+
+pgbenchtest=#
+```
+
+###
+Включите autovacuum обратно для таблицы;
+###
+```sh
+pgbenchtest=# alter table av_table reset (autovacuum_enabled);
+ALTER TABLE
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |    9889646 |    1000000 | 2026-04-26 16:10:12.434177+03
+(1 row)
+
+pgbenchtest=# select * from pg_stat_progress_vacuum \gx
+(0 rows)
+
+pgbenchtest=# select * from pg_stat_progress_vacuum \gx
+(0 rows)
+
+pgbenchtest=# select relname, reloptions from pg_class where relname = 'av_table';
+ relname  | reloptions 
+----------+------------
+ av_table | 
+(1 row)
+
+pgbenchtest=# select * from pg_stat_progress_vacuum \gx
+(0 rows)
+
+pgbenchtest=# show autovacuum;
+ autovacuum 
+------------
+ on
+(1 row)
+
+pgbenchtest=# select relname, n_dead_tup, n_live_tup, last_autovacuum from pg_stat_user_tables where relname = 'av_table';
+ relname  | n_dead_tup | n_live_tup |        last_autovacuum        
+----------+------------+------------+-------------------------------
+ av_table |          0 |    1000000 | 2026-04-26 16:25:16.973972+03
+(1 row)
+
+pgbenchtest=# 
+```
+
+###
+Видим, что после включения автовакуума на рассматриваемую таблицу, через определенное время все мертвые строки были вычищены.
+К сожалению, поймать работу автовакуума во вью не успел.
+
+###
