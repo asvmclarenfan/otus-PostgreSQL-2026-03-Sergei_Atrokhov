@@ -124,5 +124,67 @@ otus_dba1=#
 Выполняем рестарт кластера БД и проверяем значения параметров:
 ###
 ```sh
+postgres@asvpg:~$ sudo pg_ctlcluster 18 main stop
+[sudo] password for postgres: 
+Warning: The unit file, source configuration file or drop-ins of postgresql@18-main.service changed on disk. Run 'systemctl daemon-reload' to reload units.
+postgres@asvpg:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 down   postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:~$ sudo pg_ctlcluster 18 main start
+Warning: The unit file, source configuration file or drop-ins of postgresql@18-main.service changed on disk. Run 'systemctl daemon-reload' to reload units.
+postgres@asvpg:~$ systemctl daemon-reload
+postgres@asvpg:~$ 
+postgres@asvpg:~$ 
+postgres@asvpg:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:~$ sudo pg_ctlcluster 18 main stop
+postgres@asvpg:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 down   postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:~$ ps -xf
+    PID TTY      STAT   TIME COMMAND
+  12337 pts/3    S      0:00 -bash
+ 333457 pts/3    R+     0:00  \_ ps -xf
+postgres@asvpg:~$ sudo pg_ctlcluster 18 main start
+postgres@asvpg:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:~$ ps -xf
+    PID TTY      STAT   TIME COMMAND
+  12337 pts/3    S      0:00 -bash
+ 333788 pts/3    R+     0:00  \_ ps -xf
+ 333546 ?        Ss     0:00 /usr/lib/postgresql/18/bin/postgres -D /var/lib/pos
+ 333547 ?        Ss     0:00  \_ postgres: 18/main: io worker 0
+ 333548 ?        Ss     0:00  \_ postgres: 18/main: io worker 1
+ 333549 ?        Ss     0:00  \_ postgres: 18/main: io worker 2
+ 333550 ?        Ss     0:00  \_ postgres: 18/main: checkpointer 
+ 333551 ?        Ss     0:00  \_ postgres: 18/main: background writer 
+ 333553 ?        Ss     0:00  \_ postgres: 18/main: walwriter 
+ 333554 ?        Ss     0:00  \_ postgres: 18/main: autovacuum launcher 
+ 333555 ?        Ss     0:00  \_ postgres: 18/main: logical replication launcher
+postgres@asvpg:~$
 
+otus_dba1=# select name, setting, unit from pg_settings where name in
+(
+'max_connections', 'shared_buffers', 'effective_cache_size', 'maintenance_work_mem',
+'checkpoint_completion_target', 'wal_buffers', 'default_statistics_target', 'random_page_cost', 'effective_io_concurrency', 'work_mem', 'min_wal_size', 'max_wal_size');
+             name             | setting | unit 
+------------------------------+---------+------
+ checkpoint_completion_target | 0.9     | 
+ default_statistics_target    | 500     | 
+ effective_cache_size         | 393216  | 8kB
+ effective_io_concurrency     | 2       | 
+ maintenance_work_mem         | 524288  | kB
+ max_connections              | 40      | 
+ max_wal_size                 | 16384   | MB
+ min_wal_size                 | 4096    | MB
+ random_page_cost             | 4       | 
+ shared_buffers               | 131072  | 8kB
+ wal_buffers                  | 2048    | 8kB
+ work_mem                     | 6553    | kB
+(12 rows)
+
+otus_dba1=#
 ```
+
