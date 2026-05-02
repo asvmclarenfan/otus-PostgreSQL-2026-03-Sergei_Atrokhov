@@ -520,7 +520,8 @@ postgres@asvpg:~$
 
 ###
 Возвращаем значения параметров в прежние значения:
-
+###
+```sh
 otus_dba1=# alter system set synchronous_commit = 'on';
 ALTER SYSTEM
 otus_dba1=# alter system set max_wal_size = '1GB';
@@ -552,4 +553,4 @@ otus_dba1=# show checkpoint_timeout;
 (1 row)
 
 otus_dba1=#
-###
+```
