@@ -369,8 +369,180 @@ otus_dba1=#
 ```
 
 ###
+Перепроведем тест, предварительно вернув данные как были и добавим информацию по xid и pid из pg_locks:
+###
+```sh
+--начальное состояние:
+otus_dba1=# select * from testnm.tb_lock;
+ id |          created_at           | amount 
+----+-------------------------------+--------
+  2 | 2026-05-02 20:56:20.491635+03 |    200
+  3 | 2026-05-02 20:56:26.197195+03 |    300
+  1 | 2026-05-02 20:56:14.535134+03 |    100
+(3 rows)
+
+otus_dba1=#
+
+--первая сессия:
+otus_dba1=# start transaction;
+START TRANSACTION
+
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+           5323 |     12199116
+(1 row)
+
+otus_dba1=*#
+otus_dba1=*# update testnm.tb_lock set amount = 150 where id = 1;
+UPDATE 1
+otus_dba1=*#
+
+--вторая сессия:
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+          23136 |     12199117
+(1 row)
+
+otus_dba1=*#
+otus_dba1=*# update testnm.tb_lock set amount = 150 where id = 1;
+--зависание
+
+--третья сессия:
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+          37998 |     12199118
+(1 row)
+
+otus_dba1=*#
+otus_dba1=*# update testnm.tb_lock set amount = 150 where id = 1;
+--зависание
+
+--смотрим содержимое pg_locks:
+otus_dba1=# SELECT pid, locktype, relation::regclass, virtualxid AS virtxid, transactionid AS xid, mode, granted
+FROM pg_locks;
+  pid  |   locktype    |    relation    | virtxid |   xid    |       mode       | granted 
+-------+---------------+----------------+---------+----------+------------------+---------
+  5323 | relation      | testnm.tb_lock |         |          | RowExclusiveLock | t
+  5323 | virtualxid    |                | 14/36   |          | ExclusiveLock    | t
+ 23136 | relation      | testnm.tb_lock |         |          | RowExclusiveLock | t
+ 23136 | virtualxid    |                | 16/6    |          | ExclusiveLock    | t
+ 37998 | relation      | testnm.tb_lock |         |          | RowExclusiveLock | t
+ 37998 | virtualxid    |                | 18/7    |          | ExclusiveLock    | t
+ 23136 | transactionid |                |         | 12199116 | ShareLock        | f
+ 37998 | transactionid |                |         | 12199118 | ExclusiveLock    | t
+ 37998 | tuple         | testnm.tb_lock |         |          | ExclusiveLock    | f
+ 23136 | transactionid |                |         | 12199117 | ExclusiveLock    | t
+  5323 | transactionid |                |         | 12199116 | ExclusiveLock    | t
+ 23136 | tuple         | testnm.tb_lock |         |          | ExclusiveLock    | t
+(14 rows)
+
+otus_dba1=#
+
+--смотрим содержимое вью pg_stat_activity:
+otus_dba1=# select pid, pg_blocking_pids(pid), wait_event_type, wait_event, state, SUBSTR(query,1,40) as query from pg_stat_activity where pid in (5323, 23136, 37998) \gx
+-[ RECORD 1 ]----+-----------------------------------------
+pid              | 5323
+pg_blocking_pids | {}
+wait_event_type  | Client
+wait_event       | ClientRead
+state            | idle in transaction
+query            | update testnm.tb_lock set amount = 150 w
+-[ RECORD 2 ]----+-----------------------------------------
+pid              | 23136
+pg_blocking_pids | {5323}
+wait_event_type  | Lock
+wait_event       | transactionid
+state            | active
+query            | update testnm.tb_lock set amount = 150 w
+-[ RECORD 3 ]----+-----------------------------------------
+pid              | 37998
+pg_blocking_pids | {23136}
+wait_event_type  | Lock
+wait_event       | tuple
+state            | active
+query            | update testnm.tb_lock set amount = 150 w
+
+otus_dba1=#
+```
+
+###
 Объясните смысл каждой блокировки из pg_locks (что блокируется, какой режим, кто держит, кто ожидает);
 ###
-####
+```sh
+Видим по одной строке на каждый pid с типом relation (на таблицу testnm.tb_lock) с уровнем блокировки на уровне строки (RowExclusiveLock) с успешным флагом получения блокировки (granted = t) - выполняется DML и пока он не подтвержден\откачен, DDL над таблицей выполнить нельзя.
+Здесь проблем нет, так и должно быть. Блокировка на самом низком уровне.
+virtualxid по одной строке на каждый pid не рассматриваем - это виртуальынй номер транзакции в эксклюзивном режиме (ExclusiveLock) с успешным флагом получения блокировки (granted = t).
+Каждая сессия (pid) успешно получила блокировку на реальный номер транзакции в сессии (transactionid).
+Первая сессия успешно выполнила запрашиваемый апдейт и СУБД ожидает команды от клиента (wait_event = ClientRead, а state = idle in transaction).
+Апдейт второй сессии висит на блокировке. СУБД понимает, что строка заблокирована в несовместимом режиме, происходит захват блокировки ExclusiveLock на версию изменяемой строки (locktype = tuple), бит granted = t. Одновременно с этим запрашивается блокировка xid (locktype = transactionid) в разделяемом режиме SharedLock, бит granted = f(!!!), т.к. транзакция из первой сессии еще активна!
+Третья сессия не может даже захватить блокировку версии строки (locktype = tuple), в эксклюзивном режиме (mode = ExclusiveLock), бит grahted = f (!!!).
+При завершении транзакции в первой сессии дерево блокировок сместится. Во второй сессии их не будет, а в третьей сессии будет как сейчас во второй (блокировка на версию строки (tuple) будет получена, а на номер транзакции - нет):
 
-####
+--первая сессия:
+otus_dba1=*# rollback;
+ROLLBACK
+otus_dba1=#
+
+--вторая сессия:
+otus_dba1=*# update testnm.tb_lock set amount = 150 where id = 1;
+UPDATE 1
+otus_dba1=*#
+
+--третья сессия будет продолжать висеть
+
+--
+otus_dba1=# select pid, pg_blocking_pids(pid), wait_event_type, wait_event, state, SUBSTR(query,1,40) as query from pg_stat_activity where pid in (5323, 23136, 37998) \gx
+-[ RECORD 1 ]----+-----------------------------------------
+pid              | 5323
+pg_blocking_pids | {}
+wait_event_type  | Client
+wait_event       | ClientRead
+state            | idle
+query            | rollback;
+-[ RECORD 2 ]----+-----------------------------------------
+pid              | 23136
+pg_blocking_pids | {}
+wait_event_type  | Client
+wait_event       | ClientRead
+state            | idle in transaction
+query            | update testnm.tb_lock set amount = 150 w
+-[ RECORD 3 ]----+-----------------------------------------
+pid              | 37998
+pg_blocking_pids | {23136}
+wait_event_type  | Lock
+wait_event       | transactionid
+state            | active
+query            | update testnm.tb_lock set amount = 150 w
+
+otus_dba1=#
+
+--
+otus_dba1=# SELECT pid, locktype, relation::regclass, virtualxid AS virtxid, transactionid AS xid, mode, granted                                                          
+FROM pg_locks;
+  pid  |   locktype    |    relation    | virtxid |   xid    |       mode       | granted 
+-------+---------------+----------------+---------+----------+------------------+---------
+ 23136 | relation      | testnm.tb_lock |         |          | RowExclusiveLock | t
+ 23136 | virtualxid    |                | 16/6    |          | ExclusiveLock    | t
+ 37998 | relation      | testnm.tb_lock |         |          | RowExclusiveLock | t
+ 37998 | virtualxid    |                | 18/7    |          | ExclusiveLock    | t
+ 37998 | transactionid |                |         | 12199118 | ExclusiveLock    | t
+ 37998 | tuple         | testnm.tb_lock |         |          | ExclusiveLock    | t
+ 23136 | transactionid |                |         | 12199117 | ExclusiveLock    | t
+ 37998 | transactionid |                |         | 12199117 | ShareLock        | f
+(10 rows)
+
+otus_dba1=#
+
+--в оставшихся 2 сессиях откатим активные транзакции.
+```
+
+###
+Воспроизведите взаимоблокировку трех транзакций. Можно ли разобраться в ситуации постфактум, изучая журнал сообщений?
+###
