@@ -546,3 +546,343 @@ otus_dba1=#
 ###
 Воспроизведите взаимоблокировку трех транзакций. Можно ли разобраться в ситуации постфактум, изучая журнал сообщений?
 ###
+```sh
+--тест проводим на ранее созданной таблице:
+otus_dba1=# select * from testnm.tb_lock;
+ id |          created_at           | amount 
+----+-------------------------------+--------
+  2 | 2026-05-02 20:56:20.491635+03 |    200
+  3 | 2026-05-02 20:56:26.197195+03 |    300
+  1 | 2026-05-02 20:56:14.535134+03 |    100
+(3 rows)
+
+otus_dba1=#
+
+--предварительно откроем 3 сессии, начнем в каждой из них транзакцию, сохраним информацию по pid, xid:
+
+--сессия 1
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+           4985 |     12199119
+(1 row)
+
+otus_dba1=*#
+
+--сессия 2
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+           5632 |     12199120
+(1 row)
+
+otus_dba1=*#
+
+--сессия 3
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+           6413 |     12199121
+(1 row)
+
+otus_dba1=*#
+
+--сессия 1 для id=1 увеличивает amount с 100 до 150:
+otus_dba1=*# update testnm.tb_lock set amount = 150 where id = 1;
+UPDATE 1
+otus_dba1=*#
+
+--сессия 2 для id=2 увеличивает amount с 200 до 250, а затем пытается для id=1 увеличить amount до 200
+otus_dba1=*# update testnm.tb_lock set amount = 250 where id = 2;
+UPDATE 1
+otus_dba1=*# update testnm.tb_lock set amount = 200 where id = 1;
+--зависание
+
+--сессия 3 для id=1 увеличивает amount до 250, а затем пытается для id=2 увеличить amount до 300
+otus_dba1=*# update testnm.tb_lock set amount = 250 where id = 1;
+--зависание, не дошли до второго апдейта
+
+--сессия 1 для id=2 увеличивает amount до 350
+--получаем информацию об обнаружении deadlock, после чего СУБД автоматически его разрешает по истечении установленного deadlock_timeout (200мс), инициируя проверку и принудительно прервав сессию (pid=4985), которая вызвала эту проверку:
+otus_dba1=*# update testnm.tb_lock set amount = 350 where id = 2;
+ERROR:  deadlock detected
+DETAIL:  Process 4985 waits for ShareLock on transaction 12199120; blocked by process 5632.
+Process 5632 waits for ShareLock on transaction 12199119; blocked by process 4985.
+HINT:  See server log for query details.
+CONTEXT:  while updating tuple (0,2) in relation "tb_lock"
+otus_dba1=!#
+
+--смотрим лог СУБД:
+2026-05-03 11:39:53.835 MSK [5632] postgres@otus_dba1 LOG:  process 5632 still waiting for ShareLock on transaction 12199119 after 201.565 ms
+2026-05-03 11:39:53.835 MSK [5632] postgres@otus_dba1 DETAIL:  Process holding the lock: 4985. Wait queue: 5632.
+2026-05-03 11:39:53.835 MSK [5632] postgres@otus_dba1 CONTEXT:  while updating tuple (0,7) in relation "tb_lock"
+2026-05-03 11:39:53.835 MSK [5632] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 200 where id = 1;
+2026-05-03 11:40:03.597 MSK [6413] postgres@otus_dba1 LOG:  process 6413 still waiting for ExclusiveLock on tuple (0,7) of relation 57376 of database 16388 after 200.922 ms
+2026-05-03 11:40:03.597 MSK [6413] postgres@otus_dba1 DETAIL:  Process holding the lock: 5632. Wait queue: 6413.
+2026-05-03 11:40:03.597 MSK [6413] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 250 where id = 1;
+2026-05-03 11:40:18.188 MSK [1439] LOG:  checkpoint starting: time
+2026-05-03 11:40:18.310 MSK [1439] LOG:  checkpoint complete: wrote 1 buffers (0.0%), wrote 0 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.105 s, sync=0.004 s, total=0.123 s; sync files=1, longest=0.004 s, average=0.004 s; distance=1 kB, estimate=1 kB; lsn=E/B8994E8, redo lsn=E/B899488
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 LOG:  process 4985 detected deadlock while waiting for ShareLock on transaction 12199120 after 201.078 ms
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 DETAIL:  Process holding the lock: 5632. Wait queue: .
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 CONTEXT:  while updating tuple (0,2) in relation "tb_lock"
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 350 where id = 2;
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 ERROR:  deadlock detected
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 DETAIL:  Process 4985 waits for ShareLock on transaction 12199120; blocked by process 5632.
+	Process 5632 waits for ShareLock on transaction 12199119; blocked by process 4985.
+	Process 4985: update testnm.tb_lock set amount = 350 where id = 2;
+	Process 5632: update testnm.tb_lock set amount = 200 where id = 1;
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 HINT:  See server log for query details.
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 CONTEXT:  while updating tuple (0,2) in relation "tb_lock"
+2026-05-03 11:41:02.603 MSK [4985] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 350 where id = 2;
+2026-05-03 11:41:02.603 MSK [5632] postgres@otus_dba1 LOG:  process 5632 acquired ShareLock on transaction 12199119 after 68969.812 ms
+2026-05-03 11:41:02.603 MSK [5632] postgres@otus_dba1 CONTEXT:  while updating tuple (0,7) in relation "tb_lock"
+2026-05-03 11:41:02.603 MSK [5632] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 200 where id = 1;
+2026-05-03 11:41:02.603 MSK [6413] postgres@otus_dba1 LOG:  process 6413 acquired ExclusiveLock on tuple (0,7) of relation 57376 of database 16388 after 59207.073 ms
+2026-05-03 11:41:02.603 MSK [6413] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 250 where id = 1;
+2026-05-03 11:41:02.804 MSK [6413] postgres@otus_dba1 LOG:  process 6413 still waiting for ShareLock on transaction 12199120 after 200.416 ms
+2026-05-03 11:41:02.804 MSK [6413] postgres@otus_dba1 DETAIL:  Process holding the lock: 5632. Wait queue: 6413.
+2026-05-03 11:41:02.804 MSK [6413] postgres@otus_dba1 CONTEXT:  while updating tuple (0,7) in relation "tb_lock"
+2026-05-03 11:41:02.804 MSK [6413] postgres@otus_dba1 STATEMENT:  update testnm.tb_lock set amount = 250 where id = 1;
+postgres@asvpg:/var/log/postgresql$
+```
+###
+Информацию по взаимоблокировке можно найти в логе СУБД: явно указывается номер pid и xid.
+Для возникновения взаимоблокировки достаточно 2 сессий, в 3 уже начинается нагромождение дополнительных блокировок.
+В любом случае, со времен Oracle наличие взаимоблокировке - скорее вопрос не к работе СУБД, а к логике написания приложения - критерий некорректной логики работы.
+###
+
+###
+Могут ли две транзакции, выполняющие единственную команду UPDATE одной и той же таблицы (без where), заблокировать друг друга?
+###
+
+####
+Возможно, если выполняем UPDATE множества строк в нескольких сессиях (для простоты рассмотрим две), с разным порядком апдейта строк. Строки блокируются не одномоментно, а последовательно, по мере их обновления. Для демонстрации возьмем за основу книгу Егора Рогова - PostgreSQL 17. Изнутри.
+####
+```sh
+--предварительно вернем значение deadlock_timeout в исходное:
+otus_dba1=# show deadlock_timeout;
+ deadlock_timeout 
+------------------
+ 200ms
+(1 row)
+
+otus_dba1=# alter system set deadlock_timeout = '1s';
+ALTER SYSTEM
+
+otus_dba1=# select pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+otus_dba1=# show deadlock_timeout;
+ deadlock_timeout 
+------------------
+ 1s
+(1 row)
+
+otus_dba1=#
+
+--очистим таблицу testnm.tb_lock
+otus_dba1=# truncate table testnm.tb_lock;
+TRUNCATE TABLE
+otus_dba1=# select * from testnm.tb_lock;
+ id | created_at | amount 
+----+------------+--------
+(0 rows)
+
+otus_dba1=#
+
+--вставим те же 3 строки, и убедимся, что версии сттрок расположены в блоке данных (странице) в порядке возрастания amount; затем соберем статистику на таблицу и просмотрим содержимое таблицы для проверки:
+otus_dba1=# insert into testnm.tb_lock values (1, now(), 100);
+INSERT 0 1
+otus_dba1=# insert into testnm.tb_lock values (2, now(), 200);
+INSERT 0 1
+otus_dba1=# insert into testnm.tb_lock values (3, now(), 300);
+INSERT 0 1
+otus_dba1=# analyze testnm.tb_lock;
+ANALYZE
+otus_dba1=# select ctid, * from testnm.tb_lock;
+ ctid  | id |          created_at           | amount 
+-------+----+-------------------------------+--------
+ (0,1) |  1 | 2026-05-03 12:04:46.780734+03 |    100
+ (0,2) |  2 | 2026-05-03 12:04:52.594175+03 |    200
+ (0,3) |  3 | 2026-05-03 12:04:58.434865+03 |    300
+(3 rows)
+
+otus_dba1=#
+
+--создадим индекс по полю amount в обратном порядке на убывание; проверим информацию по индексам рассматриваемой таблицы и проверим отсутствие невалидных индексов в СУБД:
+otus_dba1=# create index idx_tb_lock_amount on testnm.tb_lock (amount DESC);
+CREATE INDEX
+
+otus_dba1=# select * from pg_indexes where tablename = 'tb_lock' \gx
+-[ RECORD 1 ]---------------------------------------------------------------------------
+schemaname | testnm
+tablename  | tb_lock
+indexname  | idx_tb_lock_amount
+tablespace | 
+indexdef   | CREATE INDEX idx_tb_lock_amount ON testnm.tb_lock USING btree (amount DESC)
+
+otus_dba1=# select * from pg_index where indisvalid = false or indisready = false or indislive = false \gx
+(0 rows)
+
+otus_dba1=#
+
+--для того, чтобы поймать взаимоблокировку для 2 сессий, создадим функцию с pg_sleep, которая будет ждать 3 секунды для перехода на обработку новой строки (т.к. строк всего 3):
+otus_dba1=# create function testnm.inc_slow (n numeric)
+returns numeric
+as $$
+select pg_sleep(3);
+select n + 100;
+$$ language sql;
+CREATE FUNCTION
+otus_dba1=# 
+
+otus_dba1=# \df testnm.*
+                         List of functions
+ Schema |   Name   | Result data type | Argument data types | Type 
+--------+----------+------------------+---------------------+------
+ testnm | inc_slow | numeric          | n numeric           | func
+(1 row)
+
+otus_dba1=#
+
+--сессия 1 будет обновлять все строки таблицы в том порядке, в котором они расположены в таблице.
+--Оптимизатор использует SeqScan, т.к. ему выгоднее не делать лишние чтения по индексу (размер таблицы минимальный, она рсполагается в 1 странице).
+
+otus_dba1=# select relname, relpages, reltuples from pg_class where relname = 'tb_lock';
+ relname | relpages | reltuples 
+---------+----------+-----------
+ tb_lock |        1 |         3
+(1 row)
+
+otus_dba1=#
+
+--смотрим теоретический план выполнения апдейта:
+otus_dba1=# explain
+otus_dba1-# update testnm.tb_lock set amount = testnm.inc_slow(amount);
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Update on tb_lock  (cost=0.00..1.78 rows=0 width=0)
+   ->  Seq Scan on tb_lock  (cost=0.00..1.78 rows=3 width=38)
+(2 rows)
+
+otus_dba1=#
+
+--открываем транзакцию в сессии 1, сохраняем информацию по pid и xid и запускаем апдейт всех строк (оптимизатор идет через SeqScan):
+otus_dba1=# start transaction;
+START TRANSACTION
+otus_dba1=*# select pg_backend_pid(), txid_current();
+ pg_backend_pid | txid_current 
+----------------+--------------
+           4985 |     12199131
+(1 row)
+
+otus_dba1=*#
+otus_dba1=*# update testnm.tb_lock set amount = testnm.inc_slow(amount);
+
+--открываем транзакцию в сессии 2, сохраняем информацию по pid и xid, запускаем апдейт всех строк таблицы. Чтобы апдейт пошел в обратном порядке, дадим инструкцию оптмиизатору не использовать метод доступа SeqScan - пойдет по имеющемуся индексу.
+!!!Не получилось, оптимизатор по-прежнему, идет через SeqScan - странно. Даже, когда сильно снижаешь стоимость рандомного доступа:
+otus_dba1=# show enable_seqscan;
+ enable_seqscan 
+----------------
+ on
+(1 row)
+
+otus_dba1=# set enable_seqscan = off;
+SET
+otus_dba1=# show enable_seqscan;
+ enable_seqscan 
+----------------
+ off
+(1 row)
+
+otus_dba1=# explain
+otus_dba1-# update testnm.tb_lock set amount = testnm.inc_slow(amount);
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Update on tb_lock  (cost=0.00..1.78 rows=0 width=0)
+   ->  Seq Scan on tb_lock  (cost=0.00..1.78 rows=3 width=38)
+         Disabled: true
+(3 rows)
+
+otus_dba1=#
+
+otus_dba1=# select name, setting from pg_settings where name like '%cost%';
+             name             | setting 
+------------------------------+---------
+ autovacuum_vacuum_cost_delay | 2
+ autovacuum_vacuum_cost_limit | -1
+ cpu_index_tuple_cost         | 0.005
+ cpu_operator_cost            | 0.0025
+ cpu_tuple_cost               | 0.01
+ jit_above_cost               | 100000
+ jit_inline_above_cost        | 500000
+ jit_optimize_above_cost      | 500000
+ parallel_setup_cost          | 1000
+ parallel_tuple_cost          | 0.1
+ random_page_cost             | 4
+ seq_page_cost                | 1
+ track_cost_delay_timing      | off
+ vacuum_cost_delay            | 0
+ vacuum_cost_limit            | 200
+ vacuum_cost_page_dirty       | 20
+ vacuum_cost_page_hit         | 1
+ vacuum_cost_page_miss        | 2
+(18 rows)
+
+otus_dba1=# set random_page_cost = 1;
+SET
+otus_dba1=# show enable_seqscan;                                 
+ enable_seqscan 
+----------------
+ off
+(1 row)
+
+otus_dba1=# explain                                              
+update testnm.tb_lock set amount = testnm.inc_slow(amount);
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Update on tb_lock  (cost=0.00..1.78 rows=0 width=0)
+   ->  Seq Scan on tb_lock  (cost=0.00..1.78 rows=3 width=38)
+         Disabled: true
+(3 rows)
+
+otus_dba1=#
+
+otus_dba1=# show seq_page_cost;
+ seq_page_cost 
+---------------
+ 10
+(1 row)
+
+otus_dba1=# show random_page_cost;
+ random_page_cost 
+------------------
+ 1
+(1 row)
+
+otus_dba1=# show enable_indexscan;
+ enable_indexscan 
+------------------
+ on
+(1 row)
+
+otus_dba1=# show enable_seqscan;
+ enable_seqscan 
+----------------
+ off
+(1 row)
+
+otus_dba1=#
+
+--Смущает наличие в теоретическом плане строки Disabled: true. Говорит о том, что планировщик вынужден использовать запрещенную Node в плане - SeqScan, т.к. другие использовать не может (индекс).
+```
+
