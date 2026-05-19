@@ -196,5 +196,52 @@ QUERY PLAN
  Planning Time: 0.098 ms
  Execution Time: 0.034 ms
 (12 rows)
-
 ```
+
+###
+Реализовать индекс на часть таблицы или индекс на поле с функцией
+###
+```sh
+--создадим partial (частичный) индекс
+
+--Предварительно вставим строку со значением status = 'COMPLETE':
+otus_dba1=# insert into tb_ios (id, status, t1) values (1000001, 'COMPLETE', now());
+INSERT 0 1
+otus_dba1=# analyze tb_ios;
+ANALYZE
+otus_dba1=#
+
+otus_dba1=# insert into tb_ios (id, status, t1) values (1000001, 'COMPLETE', now());
+INSERT 0 1
+otus_dba1=# analyze tb_ios;
+ANALYZE
+otus_dba1=# create index idx_tb_ios_status_partial on tb_ios (status) where status = 'COMPLETE';
+CREATE INDEX
+otus_dba1=#
+
+--проверяем, что число строк в индексе только одна:
+otus_dba1=# select relname, relpages, reltuples from pg_class where relname = 'idx_tb_ios_status_partial';
+          relname          | relpages | reltuples 
+---------------------------+----------+-----------
+ idx_tb_ios_status_partial |        2 |         1
+(1 row)
+
+otus_dba1=#
+
+--проверяем, что оптимизатор использует Index Scan, т.к. у значения COMPLETE очень хорошая селективность:
+otus_dba1=# explain (analyze, buffers) select * from tb_ios where status = 'COMPLETE';
+QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using idx_tb_ios_status_partial on tb_ios  (cost=0.12..4.14 rows=1 width=20) (actual time=0.020..0.021 rows=1.00 loops=1)
+   Index Searches: 1
+   Buffers: shared hit=1 read=1
+ Planning:
+   Buffers: shared hit=43 read=1 dirtied=1
+ Planning Time: 0.386 ms
+ Execution Time: 0.033 ms
+(7 rows)
+```
+
+###
+Создать индекс на несколько полей
+###
