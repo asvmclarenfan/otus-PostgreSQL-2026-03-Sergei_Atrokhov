@@ -75,3 +75,126 @@ QUERY PLAN
 --в данном случае стоимость и косты совпали
 ```
 
+###
+Реализовать индекс для полнотекстового поиска
+###
+```sh
+--Никогда их не использовал, сначала попробую на простом примере.
+
+--преобразование строки в tsvector с помощью функции to_tsvector
+otus_dba1=# select to_tsvector('My name is Sergei and I''m a DBA.');
+            to_tsvector            
+-----------------------------------
+ 'dba':9 'm':7 'name':2 'sergei':4
+(1 row)
+
+--проверка сопоставления tsvector с tsquery через оператор @@ (true):
+otus_dba1=# select to_tsvector('Hello, world!') @@ plainto_tsquery('hello world') as match;
+ match 
+-------
+ t
+(1 row)
+
+--проверка сопоставления tsvector с tsquery через оператор @@ (false):
+otus_dba1=# select to_tsvector('Hello, world!') @@ plainto_tsquery('ello world') as match;
+ match 
+-------
+ f
+(1 row)
+
+otus_dba1=#
+
+
+--Для показа принципа работы использую пример из книги Егора Рогова с небольшими правками.
+
+--Создадим таблицу с двумя столбцами: в первом будет храниться документ, во втором — значение tsvector.
+--Второй столбец объявляется как генерируемый:
+
+otus_dba1=# CREATE TABLE ts(
+doc text,
+doc_tsv tsvector GENERATED ALWAYS AS (
+to_tsvector('pg_catalog.russian', doc)
+) STORED
+);
+CREATE TABLE
+otus_dba1=#
+
+--вставляем набор строк:
+otus_dba1=# INSERT INTO ts(doc) VALUES
+('Во поле береза стояла'), ('Во поле кудрявая стояла'),
+('Люли, люли, стояла'), ('Люли, люли, стояла'),
+('Некому березу заломати'), ('Некому кудряву заломати'),
+('Люли, люли, заломати'), ('Люли, люли, заломати'),
+('Я пойду погуляю'), ('Белую березу заломаю'),
+('Люли, люли, заломаю'), ('Люли, люли, заломаю')
+RETURNING doc_tsv;
+            doc_tsv             
+--------------------------------
+ 'берез':3 'пол':2 'стоя':4
+ 'кудряв':3 'пол':2 'стоя':4
+ 'люл':1,2 'стоя':3
+ 'люл':1,2 'стоя':3
+ 'берез':2 'заломат':3 'нек':1
+ 'заломат':3 'кудряв':2 'нек':1
+ 'заломат':3 'люл':1,2
+ 'заломат':3 'люл':1,2
+ 'погуля':3 'пойд':2
+ 'бел':1 'берез':2 'залома':3
+ 'залома':3 'люл':1,2
+ 'залома':3 'люл':1,2
+(12 rows)
+
+INSERT 0 12
+otus_dba1=#
+
+
+otus_dba1=# CREATE INDEX ts_gin_idx ON ts USING gin (doc_tsv);
+CREATE INDEX
+otus_dba1=#
+
+otus_dba1=# SELECT * FROM ts WHERE doc_tsv @@ to_tsquery('russian', 'берез:*');
+          doc           |            doc_tsv            
+------------------------+-------------------------------
+ Во поле береза стояла  | 'берез':3 'пол':2 'стоя':4
+ Некому березу заломати | 'берез':2 'заломат':3 'нек':1
+ Белую березу заломаю   | 'бел':1 'берез':2 'залома':3
+(3 rows)
+
+otus_dba1=#
+
+--изначально оптимизатор использует SeqScan, т.к. строк мало и это дешевле, но если выключить возможность использования SeqScan, будет использоваться созданный индекс:
+otus_dba1=# explain (analyze, buffers) SELECT * FROM ts WHERE doc_tsv @@ to_tsquery('russian', 'берез:*');
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Seq Scan on ts  (cost=0.00..1.15 rows=1 width=64) (actual time=0.016..0.018 rows=3.00 loops=1)
+   Filter: (doc_tsv @@ '''берез'':*'::tsquery)
+   Rows Removed by Filter: 9
+   Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.087 ms
+ Execution Time: 0.027 ms
+(8 rows)
+
+otus_dba1=# set enable_seqscan = off;
+SET
+otus_dba1=#
+
+otus_dba1=# explain (analyze, buffers) SELECT * FROM ts WHERE doc_tsv @@ to_tsquery('russian', 'берез:*');
+QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on ts  (cost=12.77..16.79 rows=1 width=64) (actual time=0.018..0.018 rows=3.00 loops=1)
+   Recheck Cond: (doc_tsv @@ '''берез'':*'::tsquery)
+   Heap Blocks: exact=1
+   Buffers: shared hit=3
+   ->  Bitmap Index Scan on ts_gin_idx  (cost=0.00..12.77 rows=1 width=0) (actual time=0.010..0.010 rows=3.00 loops=1)
+         Index Cond: (doc_tsv @@ '''берез'':*'::tsquery)
+         Index Searches: 1
+         Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.098 ms
+ Execution Time: 0.034 ms
+(12 rows)
+
+```
