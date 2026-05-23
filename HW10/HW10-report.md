@@ -231,6 +231,7 @@ QUERY PLAN
 Реализовать запрос, в котором будут использованы разные типы соединений
 ###
 ```sh
+--Сделал через UNION ALL на тех же 2 таблицах. Если требуется что то другое, просьба сообщить.
 otus_dba1=# select 'INNER JOIN' as join_type, c.name, o.product from clients c join orders o on c.id = o.client_id
 union all
 select 'LEFT JOIN' as join_type, c.name, o.product from clients c left join orders o on c.id = o.client_id
