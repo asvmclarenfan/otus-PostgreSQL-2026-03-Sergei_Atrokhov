@@ -447,7 +447,7 @@ postgres@asvpg:/etc/postgresql/18/main$ cat pg_hba.conf
 ...
 # Allow replication connections from localhost, by a user with the
 # replication privilege.
-replication     repl_user        192.168.50.0/24        scram-sha-256
+host    replication     repl_user        192.168.50.0/24        scram-sha-256
 host    all             postgres         192.168.50.0/24        scram-sha-256
 host all all 0.0.0.0/0 scram-sha-256
 local   replication     all                                     peer
@@ -455,6 +455,25 @@ host    replication     all             127.0.0.1/32            scram-sha-256
 host    replication     all             ::1/128                 scram-sha-256
 postgres@asvpg:/etc/postgresql/18/main$ 
 
+--создаем пользователя для репликации:
+otus_dba1=# create role repl_user with replication login encrypted password 'repl_user';
+CREATE ROLE
+otus_dba1=#
+
+--Выполняем рестарт кластера БД и проверяем, что он успешно стартован:
+postgres@asvpg:/etc/postgresql/18/main$ sudo pg_ctlcluster 18 main stop
+postgres@asvpg:/etc/postgresql/18/main$ sudo pg_lsclusters 18 main
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 down   postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:/etc/postgresql/18/main$
+
+postgres@asvpg:/etc/postgresql/18/main$ sudo pg_ctlcluster 18 main start
+postgres@asvpg:/etc/postgresql/18/main$ sudo pg_lsclusters 18 main
+Ver Cluster Port Status Owner    Data directory              Log file
+18  main    5433 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
+postgres@asvpg:/etc/postgresql/18/main$
+
+--Подготовка завершена, приступаем к непосредственному выполнению ДЗ
 ```
 
 ###
@@ -464,5 +483,176 @@ postgres@asvpg:/etc/postgresql/18/main$
 Настройте публикацию таблицы test
 ###
 ```sh
+otus_dba1=# show search_path;
+   search_path   
+-----------------
+ "$user", public
+(1 row)
+
+otus_dba1=# CREATE TABLE test (id int4 primary key, descr text);
+CREATE TABLE
+                                           ^
+otus_dba1=# CREATE TABLE test2 (id int4 primary key, ro_data text);
+CREATE TABLE
+otus_dba1=#
+
+--создаем публикацию таблицы test:
+otus_dba1=# CREATE PUBLICATION pub_vm1 FOR TABLE test;
+CREATE PUBLICATION
+otus_dba1=#
+```
+
+###
+2. Настройте ВМ2:
+Создайте таблицу test2, которая будет для операций записи
+Создайте таблицу test, которая будет для чтения
+Настройте публикацию таблицы test2
+Сделайте подписку таблицы test на публикацию таблицы test с ВМ1
+###
+```sh
+otus_dba1=# CREATE TABLE test (id int4 primary key, descr text);
+CREATE TABLE
+otus_dba1=# CREATE TABLE test2 (id int4 primary key, ro_data text);
+CREATE TABLE
+
+--создаем публикацию таблицы test2:
+otus_dba1=# CREATE PUBLICATION pub_vm2 FOR TABLE test2;
+CREATE PUBLICATION
+otus_dba1=#
+--создаем подписку таблицы test на публикацию таблицы test с ВМ1, по умолчанию система использует дефолтовый порт 5432, у меня используется порт 5433. Если не поменять, будет ошибка:
+otus_dba1=# CREATE SUBSCRIPTION sub_from_vm1 CONNECTION 'host=192.168.50.11 dbname=otus_dba1 user=repl_user password=repl_user' PUBLICATION pub_vm1;
+ERROR:  subscription "sub_from_vm1" could not connect to the publisher: connection to server at "192.168.50.11", port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+otus_dba1=# CREATE SUBSCRIPTION sub_from_vm1 CONNECTION 'host=192.168.50.11 dbname=otus_dba1 port=5433 user=repl_user password=repl_user' PUBLICATION pub_vm1;
+NOTICE:  created replication slot "sub_from_vm1" on publisher
+CREATE SUBSCRIPTION
+otus_dba1=#
+--настроена начальная синхронизация таблицы test с ВМ1
+```
+
+###
+3. на ВМ1:
+Сделайте подписку таблицы test2 на публикацию таблицы test2 с ВМ2
+###
+```sh
+otus_dba1=# CREATE SUBSCRIPTION sub_from_vm2 CONNECTION 'host=192.168.50.12 dbname=otus_dba1 port=5433 user=repl_user password=repl_user' PUBLICATION pub_vm2;
+NOTICE:  created replication slot "sub_from_vm2" on publisher
+CREATE SUBSCRIPTION
+otus_dba1=#
+
+
+otus_dba1=# SELECT pubname, puballtables FROM pg_publication;
+ pubname | puballtables 
+---------+--------------
+ pub_vm1 | f
+(1 row)
+
+otus_dba1=# SELECT * FROM pg_publication_tables WHERE pubname = 'pub_vm1';
+ pubname | schemaname | tablename |  attnames  | rowfilter 
+---------+------------+-----------+------------+-----------
+ pub_vm1 | public     | test      | {id,descr} | 
+(1 row)
+
+otus_dba1=# 
+```
+
+###
+4. Настройте ВМ3:
+Создайте таблицы: test и test2
+Подпишите test на публикацию таблицы test с ВМ1
+Подпишите test2 на публикацию таблицы test2 с ВМ2
+Используйте этот узел для чтения объединённых данных и резервного копирования
+###
+```sh
+otus_dba1=# CREATE TABLE test (id int4 primary key, descr text);
+CREATE TABLE
+otus_dba1=# CREATE TABLE test2 (id int4 primary key, ro_data text);
+CREATE TABLE
+
+--подписка на таблицу test с ВМ1:
+otus_dba1=# CREATE SUBSCRIPTION sub_test_from_vm1 CONNECTION 'host=192.168.50.11 dbname=otus_dba1 port=5433 user=repl_user password=repl_user' PUBLICATION pub_vm1;
+NOTICE:  created replication slot "sub_test_from_vm1" on publisher
+CREATE SUBSCRIPTION
+otus_dba1=#
+
+--подписка на таблицу test2 с ВМ2:
+otus_dba1=# CREATE SUBSCRIPTION sub_test2_from_vm2 CONNECTION 'host=192.168.50.12 dbname=otus_dba1 port=5433 user=repl_user password=repl_user' PUBLICATION pub_vm2;
+NOTICE:  created replication slot "sub_test2_from_vm2" on publisher
+CREATE SUBSCRIPTION
+otus_dba1=#
+```
+
+###
+Проверьте работу системы:
+Выполните вставку в test на ВМ1 — убедитесь, что данные появились в test на ВМ2 и ВМ3
+Выполните вставку в test2 на ВМ2 — убедитесь, что данные появились в test2 на ВМ1 и ВМ3
+###
+```sh
+--Проверим состояние подписок:
+--ВМ1:
+otus_dba1=# SELECT * FROM pg_stat_subscription;
+subid  |   subname    | worker_type | pid  | leader_pid | relid | received_lsn |      last_msg_send_time       |     last_msg_receipt_time     | latest_end_lsn |        latest_end_time        
+--------+--------------+-------------+------+------------+-------+--------------+-------------------------------+-------------------------------+----------------+-------------------------------
+ 131114 | sub_from_vm2 | apply       | 6564 |            |       | F/924ACA10   | 2026-07-19 15:44:04.790043+03 | 2026-07-19 15:44:04.790643+03 | F/924ACA10     | 2026-07-19 15:44:04.790043+03
+(1 row)
+
+otus_dba1=#
+
+--ВМ2:
+otus_dba1=# SELECT * FROM pg_stat_subscription;
+subid  |   subname    | worker_type | pid  | leader_pid | relid | received_lsn |      last_msg_send_time       |     last_msg_receipt_time     | latest_end_lsn |        latest_end_time        
+--------+--------------+-------------+------+------------+-------+--------------+-------------------------------+-------------------------------+----------------+-------------------------------
+ 131115 | sub_from_vm1 | apply       | 6813 |            |       | F/924AAD28   | 2026-07-19 15:44:29.077558+03 | 2026-07-19 15:44:29.077697+03 | F/924AAD28     | 2026-07-19 15:44:29.077558+03
+(1 row)
+
+--ВМ3:
+otus_dba1=# SELECT * FROM pg_stat_subscription;
+subid  |      subname       | worker_type | pid  | leader_pid | relid | received_lsn |      last_msg_send_time       |     last_msg_receipt_time     | latest_end_lsn |        latest_end_time        
+--------+--------------------+-------------+------+------------+-------+--------------+-------------------------------+-------------------------------+----------------+-------------------------------
+ 131112 | sub_test_from_vm1  | apply       | 6481 |            |       | F/924AA930   | 2026-07-19 15:44:18.164208+03 | 2026-07-19 15:44:18.163587+03 | F/924AA930     | 2026-07-19 15:44:18.164208+03
+ 131113 | sub_test2_from_vm2 | apply       | 6497 |            |       | F/924B6EC0   | 2026-07-19 15:44:18.142009+03 | 2026-07-19 15:44:18.141402+03 | F/924B6EC0     | 2026-07-19 15:44:18.142009+03
+(2 rows)
+
+--ВМ1:
+otus_dba1=# INSERT INTO test (id, descr) VALUES (1, 'Row from VM1');
+INSERT 0 1
+otus_dba1=#
+
+otus_dba1=# SELECT slot_name, active, restart_lsn FROM pg_replication_slots WHERE slot_name LIKE 'sub_%';
+     slot_name     | active | restart_lsn 
+-------------------+--------+-------------
+ sub_from_vm1      | t      | F/924C2840
+ sub_test_from_vm1 | t      | F/924C2840
+(2 rows)
+
+otus_dba1=#
+
+--На ВМ2 и ВМ3 строка не появилась!
+--Если смотреть в лог СУБД, то есть ошибка по привилегиям:
+2026-07-19 15:55:45.625 MSK [7558] ERROR:  could not start initial contents copy for table "public.test": ERROR:  permission denied for table test
+2026-07-19 15:55:45.627 MSK [6616] LOG:  background worker "logical replication tablesync worker" (PID 7558) exited with exit code 1
+2026-07-19 15:55:46.663 MSK [7559] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924DD778
+2026-07-19 15:55:46.663 MSK [7559] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 15:55:46.663 MSK [7559] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131114_sync_131104_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 15:55:46.674 MSK [7559] repl_user@otus_dba1 ERROR:  permission denied for table test2
+2026-07-19 15:55:46.674 MSK [7559] repl_user@otus_dba1 STATEMENT:  COPY public.test2 (id, ro_data) TO STDOUT
+2026-07-19 15:55:50.751 MSK [7561] LOG:  logical replication table synchronization worker for subscription "sub_from_vm1", table "test" has started
+2026-07-19 15:55:50.756 MSK [7560] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924DD7B0
+2026-07-19 15:55:50.756 MSK [7560] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 15:55:50.756 MSK [7560] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131113_sync_131104_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 15:55:50.765 MSK [7560] repl_user@otus_dba1 ERROR:  permission denied for table test2
+2026-07-19 15:55:50.765 MSK [7560] repl_user@otus_dba1 STATEMENT:  COPY public.test2 (id, ro_data) TO STDOUT
+2026-07-19 15:55:50.814 MSK [7561] ERROR:  could not start initial contents copy for table "public.test": ERROR:  permission denied for table test
+2026-07-19 15:55:50.816 MSK [6616] LOG:  background worker "logical replication tablesync worker" (PID 7561) exited with exit code 1
+2026-07-19 15:55:51.933 MSK [7562] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924DD958
+2026-07-19 15:55:51.933 MSK [7562] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 15:55:51.933 MSK [7562] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131114_sync_131104_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 15:55:51.941 MSK [7562] repl_user@otus_dba1 ERROR:  permission denied for table test2
+2026-07-19 15:55:51.941 MSK [7562] repl_user@otus_dba1 STATEMENT:  COPY public.test2 (id, ro_data) TO STDOUT
+2026-07-19 15:55:55.943 MSK [7563] LOG:  logical replication table synchronization worker for subscription "sub_from_vm1", table "test" has started
+2026-07-19 15:55:56.001 MSK [7563] ERROR:  could not start initial contents copy for table "public.test": ERROR:  permission denied for table test
+
+
+--Необходимо удалить подписки, выдать права и создать подписки заново:
 
 ```
