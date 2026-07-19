@@ -400,6 +400,7 @@ root@asvpg:/etc/netplan#
 ###
 Выполняем предварительные настройки по параметрам БД и pg_hba на всех 3 ВМ:
 ###
+```sh
 otus_dba1=# 
 otus_dba1=# select name, setting, context from pg_settings where name = 'wal_level';
    name    | setting |  context   
