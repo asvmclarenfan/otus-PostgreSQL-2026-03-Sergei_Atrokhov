@@ -398,12 +398,8 @@ root@asvpg:/etc/netplan#
 ```
 
 ###
-1. Настройте ВМ1:
-Создайте таблицу test, которая будет для операций записи
-Создайте таблицу test2, которая будет для чтения
-Настройте публикацию таблицы test
+Выполняем предварительные настройки по параметрам БД и pg_hba на всех 3 ВМ:
 ###
-```sh
 otus_dba1=# 
 otus_dba1=# select name, setting, context from pg_settings where name = 'wal_level';
    name    | setting |  context   
@@ -432,18 +428,41 @@ Ver Cluster Port Status Owner    Data directory              Log file
 18  main    5433 online postgres /var/lib/postgresql/18/main /var/log/postgresql/postgresql-18-main.log
 postgres@asvpg:~$
 
---Проверяем изменение:
-postgres@asvpg:~$ psql -d otus_dba1 -p 5433
-Password for user postgres: 
-psql (18.3 (Ubuntu 18.3-1.pgdg24.04+1))
-Type "help" for help.
-
-otus_dba1=# 
-otus_dba1=# show wal_level;
- wal_level 
------------
- logical
-(1 row)
+```sh
+otus_dba1=# select name, setting, context from pg_settings where name in ('wal_level', 'max_replication_slots', 'max_wal_senders', 'listen_addresses');
+         name          | setting |  context   
+-----------------------+---------+------------
+ listen_addresses      | *       | postmaster
+ max_replication_slots | 10      | postmaster
+ max_wal_senders       | 10      | postmaster
+ wal_level             | logical | postmaster
+(4 rows)
 
 otus_dba1=#
+
+--Настройка pg_hba:
+postgres@asvpg:/etc/postgresql/18/main$ pwd
+/etc/postgresql/18/main
+postgres@asvpg:/etc/postgresql/18/main$ cat pg_hba.conf 
+...
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+replication     repl_user        192.168.50.0/24        scram-sha-256
+host    all             postgres         192.168.50.0/24        scram-sha-256
+host all all 0.0.0.0/0 scram-sha-256
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+postgres@asvpg:/etc/postgresql/18/main$ 
+
+```
+
+###
+1. Настройте ВМ1:
+Создайте таблицу test, которая будет для операций записи
+Создайте таблицу test2, которая будет для чтения
+Настройте публикацию таблицы test
+###
+```sh
+
 ```
