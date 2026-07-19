@@ -655,4 +655,196 @@ otus_dba1=#
 
 --Необходимо удалить подписки, выдать права и создать подписки заново:
 
+otus_dba1=# GRANT ALL ON SCHEMA public TO repl_user;
+GRANT
+otus_dba1=# ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO repl_user;
+ALTER DEFAULT PRIVILEGES
+otus_dba1=# GRANT ALL PRIVILEGES ON TABLE test TO repl_user;
+GRANT
+otus_dba1=# GRANT ALL PRIVILEGES ON TABLE test2 TO repl_user;
+GRANT
+otus_dba1=#
+
+otus_dba1=# select schemaname, tablename, tableowner from pg_tables where tablename in ('test', 'test2');
+ schemaname | tablename | tableowner 
+------------+-----------+------------
+ public     | test2     | postgres
+ public     | test      | postgres
+(2 rows)
+
+otus_dba1=# ALTER TABLE test OWNER TO repl_user;
+ALTER TABLE
+otus_dba1=# ALTER TABLE test2 OWNER TO repl_user;
+ALTER TABLE
+otus_dba1=# select schemaname, tablename, tableowner from pg_tables where tablename in ('test', 'test2');
+ schemaname | tablename | tableowner 
+------------+-----------+------------
+ public     | test2     | repl_user
+ public     | test      | repl_user
+(2 rows)
+
+otus_dba1=#
+
+--Пересоздаем подписки, очищаем таблицу test на ВМ1, вставляем строку, теперь на ВМ2 и ВМ3 строка появилась:
+
+--ВМ2:
+otus_dba1=# select * from test;
+ id |    descr     
+----+--------------
+  1 | Row from VM1
+(1 row)
+
+otus_dba1=#
+
+
+--ВМ3:
+otus_dba1=# select * from test;
+ id |    descr     
+----+--------------
+  1 | Row from VM1
+(1 row)
+
+otus_dba1=#
+
+
+
+--Теперь вторая проверка - всталяем строку на ВМ2:
+otus_dba1=# INSERT INTO test2 (id, ro_data) VALUES (2, 'Row from VM2');
+INSERT 0 1
+otus_dba1=# select * from test2;
+ id |   ro_data    
+----+--------------
+  2 | Row from VM2
+(1 row)
+
+otus_dba1=#
+
+--Проверяем, что строка перенеслась.
+--ВМ1:
+otus_dba1=# select * from test2;
+ id |   ro_data    
+----+--------------
+  2 | Row from VM2
+(1 row)
+
+otus_dba1=#
+
+--ВМ3:
+otus_dba1=# select * from test2;
+ id |   ro_data    
+----+--------------
+  2 | Row from VM2
+(1 row)
+
+otus_dba1=#
+
+
+--Ниже инофрмация из лога СУБД на каждой из ВМ.
+
+--ВМ1:
+026-07-19 17:25:14.972 MSK [7753] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F45A8
+2026-07-19 17:25:14.972 MSK [7753] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:14.972 MSK [7753] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "sub_from_vm1" LOGICAL pgoutput (SNAPSHOT 'nothing')
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 LOG:  starting logical decoding for slot "sub_from_vm1"
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924F45E0, reading WAL from F/924F45A8.
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_from_vm1" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F45A8
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:15.008 MSK [7754] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_from_vm1" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:25:15.081 MSK [7755] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F45E0
+2026-07-19 17:25:15.081 MSK [7755] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:15.081 MSK [7755] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131117_sync_131096_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 LOG:  starting logical decoding for slot "pg_131117_sync_131096_7626037940681749860"
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924F4618, reading WAL from F/924F45E0.
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131117_sync_131096_7626037940681749860" LOGICAL F/924F4618 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F45E0
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:15.100 MSK [7755] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131117_sync_131096_7626037940681749860" LOGICAL F/924F4618 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:25:27.640 MSK [6206] LOG:  checkpoint starting: time
+2026-07-19 17:25:28.950 MSK [6206] LOG:  checkpoint complete: wrote 10 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=1.283 s, sync=0.014 s, total=1.310 s; sync files=9, longest=0.006 s, average=0.002 s; distance=36 kB, estimate=93 kB; lsn=F/924F4670, redo lsn=F/924F4618
+2026-07-19 17:25:36.991 MSK [7758] LOG:  logical replication apply worker for subscription "sub_from_vm2" has started
+2026-07-19 17:25:37.008 MSK [7759] LOG:  logical replication table synchronization worker for subscription "sub_from_vm2", table "test2" has started
+2026-07-19 17:25:37.035 MSK [7759] LOG:  logical replication table synchronization worker for subscription "sub_from_vm2", table "test2" has finished
+2026-07-19 17:26:06.853 MSK [7760] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F5BA0
+2026-07-19 17:26:06.853 MSK [7760] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:06.853 MSK [7760] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "sub_test_from_vm1" LOGICAL pgoutput (SNAPSHOT 'nothing')
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 LOG:  starting logical decoding for slot "sub_test_from_vm1"
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924F5BD8, reading WAL from F/924F5BA0.
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_test_from_vm1" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F5BA0
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:06.894 MSK [7761] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_test_from_vm1" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:26:06.938 MSK [7762] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F5BD8
+2026-07-19 17:26:06.938 MSK [7762] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:06.938 MSK [7762] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131115_sync_131096_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 LOG:  starting logical decoding for slot "pg_131115_sync_131096_7626037940681749860"
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924F5C10, reading WAL from F/924F5BD8.
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131115_sync_131096_7626037940681749860" LOGICAL F/924F5C10 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924F5BD8
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:06.959 MSK [7762] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131115_sync_131096_7626037940681749860" LOGICAL F/924F5C10 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm1"')
+2026-07-19 17:30:28.049 MSK [6206] LOG:  checkpoint starting: time
+2026-07-19 17:30:30.065 MSK [6206] LOG:  checkpoint complete: wrote 16 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=1.979 s, sync=0.021 s, total=2.017 s; sync files=17, longest=0.003 s, average=0.002 s; distance=36 kB, estimate=87 kB; lsn=F/924FDA10, redo lsn=F/924FD980
+2026-07-19 17:35:28.201 MSK [6206] LOG:  checkpoint starting: time
+2026-07-19 17:35:28.543 MSK [6206] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.319 s, sync=0.008 s, total=0.343 s; sync files=3, longest=0.006 s, average=0.003 s; distance=0 kB, estimate=79 kB; lsn=F/924FDCC0, redo lsn=F/924FDC68
+
+--ВМ2:
+2026-07-19 17:25:14.982 MSK [8137] LOG:  logical replication apply worker for subscription "sub_from_vm1" has started
+2026-07-19 17:25:15.011 MSK [8138] LOG:  logical replication table synchronization worker for subscription "sub_from_vm1", table "test" has started
+2026-07-19 17:25:15.103 MSK [8138] LOG:  logical replication table synchronization worker for subscription "sub_from_vm1", table "test" has finished
+2026-07-19 17:25:36.984 MSK [8141] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC1D0
+2026-07-19 17:25:36.984 MSK [8141] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:36.984 MSK [8141] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "sub_from_vm2" LOGICAL pgoutput (SNAPSHOT 'nothing')
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 LOG:  starting logical decoding for slot "sub_from_vm2"
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924FC208, reading WAL from F/924FC1D0.
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_from_vm2" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC1D0
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:37.005 MSK [8142] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_from_vm2" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:25:37.024 MSK [8143] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC208
+2026-07-19 17:25:37.024 MSK [8143] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:37.024 MSK [8143] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 LOG:  starting logical decoding for slot "pg_131116_sync_131104_7626037940681749860"
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924FC240, reading WAL from F/924FC208.
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL F/924FC240 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC208
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:25:37.031 MSK [8143] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL F/924FC240 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:26:14.703 MSK [6620] LOG:  checkpoint starting: time
+2026-07-19 17:26:17.311 MSK [6620] LOG:  checkpoint complete: wrote 21 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=2.513 s, sync=0.079 s, total=2.608 s; sync files=19, longest=0.070 s, average=0.005 s; distance=43 kB, estimate=106 kB; lsn=F/924FC2D0, redo lsn=F/924FC240
+2026-07-19 17:26:19.425 MSK [8144] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC348
+2026-07-19 17:26:19.425 MSK [8144] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:19.425 MSK [8144] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "sub_test2_from_vm2" LOGICAL pgoutput (SNAPSHOT 'nothing')
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 LOG:  starting logical decoding for slot "sub_test2_from_vm2"
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924FC380, reading WAL from F/924FC348.
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_test2_from_vm2" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC348
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:19.455 MSK [8145] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "sub_test2_from_vm2" LOGICAL 0/0 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:26:19.489 MSK [8146] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC380
+2026-07-19 17:26:19.489 MSK [8146] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:19.489 MSK [8146] repl_user@otus_dba1 STATEMENT:  CREATE_REPLICATION_SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL pgoutput (SNAPSHOT 'use')
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 LOG:  starting logical decoding for slot "pg_131116_sync_131104_7626037940681749860"
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 DETAIL:  Streaming transactions committing after F/924FC3B8, reading WAL from F/924FC380.
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL F/924FC3B8 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 LOG:  logical decoding found consistent point at F/924FC380
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 DETAIL:  There are no running transactions.
+2026-07-19 17:26:19.503 MSK [8146] repl_user@otus_dba1 STATEMENT:  START_REPLICATION SLOT "pg_131116_sync_131104_7626037940681749860" LOGICAL F/924FC3B8 (proto_version '4', streaming 'parallel', origin 'any', publication_names '"pub_vm2"')
+2026-07-19 17:31:14.425 MSK [6620] LOG:  checkpoint starting: time
+2026-07-19 17:31:15.408 MSK [6620] LOG:  checkpoint complete: wrote 8 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.964 s, sync=0.009 s, total=0.983 s; sync files=9, longest=0.004 s, average=0.001 s; distance=31 kB, estimate=98 kB; lsn=F/92504200, redo lsn=F/925041A8
+2026-07-19 17:36:14.444 MSK [6620] LOG:  checkpoint starting: time
+2026-07-19 17:36:14.949 MSK [6620] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.477 s, sync=0.010 s, total=0.505 s; sync files=3, longest=0.009 s, average=0.004 s; distance=0 kB, estimate=88 kB; lsn=F/92504458, redo lsn=F/92504400
+
+
+--ВМ3:
+026-07-19 17:26:06.873 MSK [7377] LOG:  logical replication apply worker for subscription "sub_test_from_vm1" has started
+2026-07-19 17:26:06.896 MSK [7378] LOG:  logical replication table synchronization worker for subscription "sub_test_from_vm1", table "test" has started
+2026-07-19 17:26:06.961 MSK [7378] LOG:  logical replication table synchronization worker for subscription "sub_test_from_vm1", table "test" has finished
+2026-07-19 17:26:19.432 MSK [7379] LOG:  logical replication apply worker for subscription "sub_test2_from_vm2" has started
+2026-07-19 17:26:19.457 MSK [7380] LOG:  logical replication table synchronization worker for subscription "sub_test2_from_vm2", table "test2" has started
+2026-07-19 17:26:19.506 MSK [7380] LOG:  logical replication table synchronization worker for subscription "sub_test2_from_vm2", table "test2" has finished
+2026-07-19 17:28:31.888 MSK [6283] LOG:  checkpoint starting: time
+2026-07-19 17:28:34.232 MSK [6283] LOG:  checkpoint complete: wrote 16 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=2.323 s, sync=0.008 s, total=2.345 s; sync files=19, longest=0.003 s, average=0.001 s; distance=41 kB, estimate=128 kB; lsn=F/925001F0, redo lsn=F/92500198
+2026-07-19 17:33:31.331 MSK [6283] LOG:  checkpoint starting: time
+2026-07-19 17:33:31.701 MSK [6283] LOG:  checkpoint complete: wrote 3 buffers (0.0%), wrote 1 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.347 s, sync=0.009 s, total=0.370 s; sync files=3, longest=0.008 s, average=0.003 s; distance=0 kB, estimate=115 kB; lsn=F/92500468, redo lsn=F/92500410
 ```
