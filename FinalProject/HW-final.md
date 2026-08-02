@@ -26,11 +26,12 @@ Intel
 
 <img width="2687" height="972" alt="pr10_deploy" src="https://github.com/user-attachments/assets/e7ce50c1-4a41-4f5f-8d05-e79ab8095f8f" />
 
-<img width="1728" height="994" alt="pr11_deploy" src="https://github.com/user-attachments/assets/ab030dd5-6e67-4734-847e-6888bc9137d6" />
-
-<img width="1728" height="972" alt="pr12_deploy" src="https://github.com/user-attachments/assets/31acf001-1ced-471f-8fac-5eea3bc73b57" />
-
 <img width="1728" height="972" alt="pr13_deploy" src="https://github.com/user-attachments/assets/fb437c63-4c1e-4358-a95d-f6f74daf0a06" />
 
 <img width="1728" height="972" alt="pr14_deploy" src="https://github.com/user-attachments/assets/79841800-d536-4def-b7ac-1a65e9e15f1d" />
 
+<img width="1728" height="972" alt="pr16_deploy" src="https://github.com/user-attachments/assets/1436415b-b7d7-461f-bd38-024c9aef3a62" />
+
+<img width="1728" height="972" alt="pr17_deploy" src="https://github.com/user-attachments/assets/c73f1b3c-301a-49ff-8255-e033c2ded377" />
+
+<img width="1728" height="972" alt="pr18_deploy" src="https://github.com/user-attachments/assets/abc17714-a5cb-4bcb-be31-6afd8594ab57" />
