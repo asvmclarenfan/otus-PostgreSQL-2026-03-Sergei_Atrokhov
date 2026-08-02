@@ -35,3 +35,15 @@ Intel
 <img width="1728" height="972" alt="pr17_deploy" src="https://github.com/user-attachments/assets/c73f1b3c-301a-49ff-8255-e033c2ded377" />
 
 <img width="1728" height="972" alt="pr18_deploy" src="https://github.com/user-attachments/assets/abc17714-a5cb-4bcb-be31-6afd8594ab57" />
+
+<img width="1728" height="972" alt="pr19_deploy" src="https://github.com/user-attachments/assets/dde6036e-563c-4a83-93b0-4b1d4bf23f7e" />
+
+<img width="1728" height="972" alt="pr20_deploy" src="https://github.com/user-attachments/assets/5e1d003c-2d80-4137-8690-7e8547847794" />
+
+<img width="1728" height="972" alt="pr21_deploy" src="https://github.com/user-attachments/assets/a15eacd2-cfe9-49e0-8e23-b6bdbd3ccfcb" />
+
+<img width="1728" height="972" alt="pr22_deploy" src="https://github.com/user-attachments/assets/bfa74d39-776b-4e55-8ac0-bc8e8b5cc66e" />
+
+<img width="2311" height="972" alt="pr23_deploy" src="https://github.com/user-attachments/assets/98107d50-aaed-433a-af3e-3af0687468bc" />
+
+
