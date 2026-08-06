@@ -523,3 +523,335 @@ Error: unhealthy cluster
 asvpg@vm-etcd1:~$
 ```
 
+####
+Видим ошибку unhealthy cluster.
+Причина: клиент (etcdctl) пытается разрешить имя vm-etcd1.
+Система смотрит в файл /etc/hosts и находит там запись (создается облачным провайдером или установщиком ОС автоматически):
+127.0.1.1 vm-etcd1.
+Клиент идет по адресу 127.0.1.1. Это адрес локальной петли (loopback), но не тот же самый, что 127.0.0.1 (localhost). На порту 2379 по адресу 127.0.1.1 никто не слушает, поэтому соединение сбрасывается.
+При этом узлы vm-etcd2 и vm-etcd3 здоровы, т.к. их имена либо резолвятся через DNS Яндекса во внешние IP, или обращение происходит к ним напрямую, минуя локальный конфликт имен.
+Сам сервер etcd на первой ноде работает (иначе кластер бы вообще не собрался), просто клиент обращается 'не туда'.
+
+Посмотрим содержимое файла /etc/hosts:
+####
+```sh
+asvpg@vm-etcd1:~$ cat /etc/hosts
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+127.0.1.1 vm-etcd1.ru-central1.internal vm-etcd1
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd1:~$
+```
+
+Важно!: в Яндекс Облаке файл /etc/hosts управляется автоматически (об этом говорит заголовок про manage_etc_hosts). 
+Нужно отключить автоматическое управление этим файлом, чтобы можно было прописать статические IP-адреса вручную.
+В файле /etc/cloud/cloud.cfg настройки нет, выполняем через шаблон, в котором комментируем строку 127.0.1.1 {{fqdn}} {{hostname}}
+и прописываем статические IP для каждой ноды кластера etcd, меняем конфиг на каждой из нод кластера etcd:
+####
+```sh
+asvpg@vm-etcd1:~$ cat /etc/cloud/templates/hosts.debian.tmpl
+## template:jinja
+{#
+This file (/etc/cloud/templates/hosts.debian.tmpl) is only utilized
+if enabled in cloud-config.  Specifically, in order to enable it
+you need to add the following to config:
+   manage_etc_hosts: True
+-#}
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+{# The value '{{hostname}}' will be replaced with the local-hostname -#}
+127.0.1.1 {{fqdn}} {{hostname}}
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd1:~$
+
+
+asvpg@vm-etcd1:~$ sudo nano /etc/cloud/templates/hosts.debian.tmpl
+asvpg@vm-etcd1:~$ cat /etc/cloud/templates/hosts.debian.tmpl
+## template:jinja
+{#
+This file (/etc/cloud/templates/hosts.debian.tmpl) is only utilized
+if enabled in cloud-config.  Specifically, in order to enable it
+you need to add the following to config:
+   manage_etc_hosts: True
+-#}
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+{# The value '{{hostname}}' will be replaced with the local-hostname -#}
+#127.0.1.1 {{fqdn}} {{hostname}}
+
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd1:~$
+
+
+asvpg@vm-etcd2:~$ sudo nano /etc/cloud/templates/hosts.debian.tmpl
+asvpg@vm-etcd2:~$ cat /etc/cloud/templates/hosts.debian.tmpl
+## template:jinja
+{#
+This file (/etc/cloud/templates/hosts.debian.tmpl) is only utilized
+if enabled in cloud-config.  Specifically, in order to enable it
+you need to add the following to config:
+   manage_etc_hosts: True
+-#}
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+{# The value '{{hostname}}' will be replaced with the local-hostname -#}
+#127.0.1.1 {{fqdn}} {{hostname}}
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd2:~$
+
+
+
+asvpg@vm-etcd3:~$ sudo nano /etc/cloud/templates/hosts.debian.tmpl
+asvpg@vm-etcd3:~$ cat /etc/cloud/templates/hosts.debian.tmpl
+## template:jinja
+{#
+This file (/etc/cloud/templates/hosts.debian.tmpl) is only utilized
+if enabled in cloud-config.  Specifically, in order to enable it
+you need to add the following to config:
+   manage_etc_hosts: True
+-#}
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+{# The value '{{hostname}}' will be replaced with the local-hostname -#}
+#127.0.1.1 {{fqdn}} {{hostname}}
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd3:~$
+```
+
+####
+Выполняем рестарт каждой из 3 ВМ и проверяем настройку в /etc/hosts:
+####
+```sh
+asvpg@vm-etcd1:~$ cat /etc/hosts
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+#127.0.1.1 vm-etcd1.ru-central1.internal vm-etcd1
+
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd1:~$
+
+
+asvpg@vm-etcd2:~$ cat /etc/hosts
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+#127.0.1.1 vm-etcd2.ru-central1.internal vm-etcd2
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd2:~$
+
+
+
+asvpg@vm-etcd3:~$ cat /etc/hosts
+# Your system has configured 'manage_etc_hosts' as True.
+# As a result, if you wish for changes to this file to persist
+# then you will need to either
+# a.) make changes to the master file in /etc/cloud/templates/hosts.debian.tmpl
+# b.) change or remove the value of 'manage_etc_hosts' in
+#     /etc/cloud/cloud.cfg or cloud-config from user-data
+#
+#127.0.1.1 vm-etcd3.ru-central1.internal vm-etcd3
+10.129.0.23 vm-etcd1 vm-etcd1.ru-central1.internal
+10.129.0.17 vm-etcd2 vm-etcd2.ru-central1.internal
+10.129.0.11 vm-etcd3 vm-etcd3.ru-central1.internal
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+
+asvpg@vm-etcd3:~$
+```
+
+###
+Далее проверяем статус службы etcd и кластера:
+###
+```sh
+asvpg@vm-etcd1:~$ sudo systemctl status etcd.service
+● etcd.service - etcd - highly-available key value store
+     Loaded: loaded (/usr/lib/systemd/system/etcd.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-08-06 19:32:22 UTC; 6min ago
+       Docs: https://etcd.io/docs
+             man:etcd
+   Main PID: 755 (etcd)
+      Tasks: 8 (limit: 2313)
+     Memory: 33.1M (peak: 33.6M)
+        CPU: 3.315s
+     CGroup: /system.slice/etcd.service
+             └─755 /usr/bin/etcd
+
+Aug 06 19:32:22 vm-etcd1 etcd[755]: ready to serve client requests
+Aug 06 19:32:22 vm-etcd1 etcd[755]: serving insecure client requests on 127.0.0.1:2379, this is strongly discouraged!
+Aug 06 19:32:22 vm-etcd1 etcd[755]: serving insecure client requests on 10.129.0.23:2379, this is strongly discouraged!
+Aug 06 19:32:22 vm-etcd1 etcd[755]: published {Name:vm-etcd1 ClientURLs:[http://10.129.0.23:2379]} to cluster f30f6076f>
+Aug 06 19:32:22 vm-etcd1 systemd[1]: Started etcd.service - etcd - highly-available key value store.
+Aug 06 19:32:23 vm-etcd1 etcd[755]: peer e6178adcaa90b752 became active
+Aug 06 19:32:23 vm-etcd1 etcd[755]: established a TCP streaming connection with peer e6178adcaa90b752 (stream Message w>
+Aug 06 19:32:23 vm-etcd1 etcd[755]: established a TCP streaming connection with peer e6178adcaa90b752 (stream MsgApp v2>
+Aug 06 19:32:23 vm-etcd1 etcd[755]: established a TCP streaming connection with peer e6178adcaa90b752 (stream MsgApp v2>
+Aug 06 19:32:23 vm-etcd1 etcd[755]: established a TCP streaming connection with peer e6178adcaa90b752 (stream Message r>
+asvpg@vm-etcd1:~$
+
+svpg@vm-etcd2:~$ sudo systemctl status etcd.service
+● etcd.service - etcd - highly-available key value store
+     Loaded: loaded (/usr/lib/systemd/system/etcd.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-08-06 19:32:22 UTC; 7min ago
+       Docs: https://etcd.io/docs
+             man:etcd
+   Main PID: 758 (etcd)
+      Tasks: 8 (limit: 2313)
+     Memory: 50.9M (peak: 51.4M)
+        CPU: 4.418s
+     CGroup: /system.slice/etcd.service
+             └─758 /usr/bin/etcd
+
+Aug 06 19:32:22 vm-etcd2 etcd[758]: serving insecure client requests on 10.129.0.17:2379, this is strongly discouraged!
+Aug 06 19:32:22 vm-etcd2 etcd[758]: failed to reach the peerURL(http://10.129.0.11:2380) of member e6178adcaa90b752 (Ge>
+Aug 06 19:32:22 vm-etcd2 etcd[758]: cannot get the version of member e6178adcaa90b752 (Get "http://10.129.0.11:2380/ver>
+Aug 06 19:32:22 vm-etcd2 systemd[1]: Started etcd.service - etcd - highly-available key value store.
+Aug 06 19:32:24 vm-etcd2 etcd[758]: peer e6178adcaa90b752 became active
+Aug 06 19:32:24 vm-etcd2 etcd[758]: established a TCP streaming connection with peer e6178adcaa90b752 (stream Message r>
+Aug 06 19:32:24 vm-etcd2 etcd[758]: established a TCP streaming connection with peer e6178adcaa90b752 (stream MsgApp v2>
+Aug 06 19:32:24 vm-etcd2 etcd[758]: established a TCP streaming connection with peer e6178adcaa90b752 (stream MsgApp v2>
+Aug 06 19:32:24 vm-etcd2 etcd[758]: established a TCP streaming connection with peer e6178adcaa90b752 (stream Message w>
+Aug 06 19:32:24 vm-etcd2 etcd[758]: 9b8dccf1b7e23a6e initialized peer connection; fast-forwarding 8 ticks (election tic>
+asvpg@vm-etcd2:~$
+
+asvpg@vm-etcd3:~$ sudo systemctl status etcd.service
+● etcd.service - etcd - highly-available key value store
+     Loaded: loaded (/usr/lib/systemd/system/etcd.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-08-06 19:32:23 UTC; 8min ago
+       Docs: https://etcd.io/docs
+             man:etcd
+   Main PID: 753 (etcd)
+      Tasks: 8 (limit: 2313)
+     Memory: 48.9M (peak: 49.4M)
+        CPU: 4.198s
+     CGroup: /system.slice/etcd.service
+             └─753 /usr/bin/etcd
+
+Aug 06 19:32:23 vm-etcd3 etcd[753]: raft2026/08/06 19:32:23 INFO: raft.node: e6178adcaa90b752 elected leader 9b8dccf1b7e23a6e at term>
+Aug 06 19:32:23 vm-etcd3 etcd[753]: published {Name:vm-etcd3 ClientURLs:[http://10.129.0.11:2379]} to cluster f30f6076f7a70326
+Aug 06 19:32:23 vm-etcd3 etcd[753]: ready to serve client requests
+Aug 06 19:32:23 vm-etcd3 etcd[753]: ready to serve client requests
+Aug 06 19:32:23 vm-etcd3 etcd[753]: serving insecure client requests on 127.0.0.1:2379, this is strongly discouraged!
+Aug 06 19:32:23 vm-etcd3 etcd[753]: serving insecure client requests on 10.129.0.11:2379, this is strongly discouraged!
+Aug 06 19:32:23 vm-etcd3 systemd[1]: Started etcd.service - etcd - highly-available key value store.
+Aug 06 19:32:23 vm-etcd3 etcd[753]: established a TCP streaming connection with peer fb67a1ba60c76013 (stream MsgApp v2 writer)
+Aug 06 19:32:23 vm-etcd3 etcd[753]: established a TCP streaming connection with peer fb67a1ba60c76013 (stream Message writer)
+Aug 06 19:32:23 vm-etcd3 etcd[753]: e6178adcaa90b752 initialized peer connection; fast-forwarding 8 ticks (election ticks 10) with 2 >
+asvpg@vm-etcd3:~$
+
+asvpg@vm-etcd1:~$ etcdctl endpoint health --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
+http://vm-etcd2:2379 is healthy: successfully committed proposal: took = 2.51286ms
+http://vm-etcd3:2379 is healthy: successfully committed proposal: took = 2.916398ms
+http://vm-etcd1:2379 is healthy: successfully committed proposal: took = 2.847273ms
+asvpg@vm-etcd1:~$
+
+asvpg@vm-etcd2:~$ etcdctl endpoint health --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
+http://vm-etcd2:2379 is healthy: successfully committed proposal: took = 1.323118ms
+http://vm-etcd1:2379 is healthy: successfully committed proposal: took = 5.579086ms
+http://vm-etcd3:2379 is healthy: successfully committed proposal: took = 5.669986ms
+asvpg@vm-etcd2:~$
+
+asvpg@vm-etcd3:~$ etcdctl endpoint health --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
+http://vm-etcd2:2379 is healthy: successfully committed proposal: took = 6.963632ms
+http://vm-etcd3:2379 is healthy: successfully committed proposal: took = 11.870338ms
+http://vm-etcd1:2379 is healthy: successfully committed proposal: took = 7.032845ms
+asvpg@vm-etcd3:~$
+```
+
+###
+Кластер собран
+###
