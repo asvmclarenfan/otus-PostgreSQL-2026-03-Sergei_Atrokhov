@@ -852,6 +852,247 @@ http://vm-etcd1:2379 is healthy: successfully committed proposal: took = 7.03284
 asvpg@vm-etcd3:~$
 ```
 
+####
+С помощью опции table можно посмотреть информацию в более подробном формате с размером БД, кто лидер итд:
+####
+```sh
+asvpg@vm-etcd1:~$ etcdctl endpoint status -w table --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|       ENDPOINT       |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| http://vm-etcd1:2379 | fb67a1ba60c76013 |  3.4.30 |   16 kB |     false |      false |        59 |         36 |                 36 |        |
+| http://vm-etcd2:2379 | 9b8dccf1b7e23a6e |  3.4.30 |   20 kB |      true |      false |        59 |         36 |                 36 |        |
+| http://vm-etcd3:2379 | e6178adcaa90b752 |  3.4.30 |   20 kB |     false |      false |        59 |         36 |                 36 |        |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+asvpg@vm-etcd1:~$
+```
+####
+Несмотря на указанную вторую ноду как лидер, писать и читать можно с любой имеющейся ноды кластера!
+Если у ноды статус LEARNER, то она не участвует в выборах лидера, нода изучает\проигрывает логи, т.к. на настоящий момент у нее нет всего объема информации. Если видим этот статус - ничего страшного, через какое-то время нода перейдет в нормальный статус.
+
+После сборки кластера есть рекомендация поменять состояние\статус кластера с NEW на EXISTING:
+####
+```sh
+svpg@vm-etcd1:~$ sudo nano /etc/default/etcd
+asvpg@vm-etcd1:~$ cat /etc/default/etcd
+## etcd(1) daemon options
+## See "/usr/share/doc/etcd-server/op-guide/configuration.md.gz"
+## for available options.
+##
+## Use environment to override, for example: ETCD_NAME=default
+ETCD_NAME="vm-etcd1"
+ETCD_LISTEN_CLIENT_URLS="http://localhost:2379,http://10.129.0.23:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://10.129.0.23:2379"
+ETCD_LISTEN_PEER_URLS="http://10.129.0.23:2380"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://10.129.0.23:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="PatroniCluster"
+ETCD_INITIAL_CLUSTER="vm-etcd1=http://10.129.0.23:2380,vm-etcd2=http://10.129.0.17:2380,vm-etcd3=http://10.129.0.11:2380"
+ETCD_INITIAL_CLUSTER_STATE="existing"
+ETCD_DATA_DIR="/var/lib/etcd"
+asvpg@vm-etcd1:~$
+
+
+asvpg@vm-etcd2:~$ sudo nano /etc/default/etcd
+asvpg@vm-etcd2:~$ cat /etc/default/etcd
+## etcd(1) daemon options
+## See "/usr/share/doc/etcd-server/op-guide/configuration.md.gz"
+## for available options.
+##
+## Use environment to override, for example: ETCD_NAME=default
+ETCD_NAME="vm-etcd2"
+ETCD_LISTEN_CLIENT_URLS="http://localhost:2379,http://10.129.0.17:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://10.129.0.17:2379"
+ETCD_LISTEN_PEER_URLS="http://10.129.0.17:2380"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://10.129.0.17:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="PatroniCluster"
+ETCD_INITIAL_CLUSTER="vm-etcd1=http://10.129.0.23:2380,vm-etcd2=http://10.129.0.17:2380,vm-etcd3=http://10.129.0.11:2380"
+ETCD_INITIAL_CLUSTER_STATE="existing"
+ETCD_DATA_DIR="/var/lib/etcd"
+asvpg@vm-etcd2:~$
+
+
+asvpg@vm-etcd3:~$ sudo nano /etc/default/etcd
+asvpg@vm-etcd3:~$ cat /etc/default/etcd
+## etcd(1) daemon options
+## See "/usr/share/doc/etcd-server/op-guide/configuration.md.gz"
+## for available options.
+##
+## Use environment to override, for example: ETCD_NAME=default
+ETCD_NAME="vm-etcd3"
+ETCD_LISTEN_CLIENT_URLS="http://localhost:2379,http://10.129.0.11:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://10.129.0.11:2379"
+ETCD_LISTEN_PEER_URLS="http://10.129.0.11:2380"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://10.129.0.11:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="PatroniCluster"
+ETCD_INITIAL_CLUSTER="vm-etcd1=http://10.129.0.23:2380,vm-etcd2=http://10.129.0.17:2380,vm-etcd3=http://10.129.0.11:2380"
+ETCD_INITIAL_CLUSTER_STATE="existing"
+ETCD_DATA_DIR="/var/lib/etcd"
+asvpg@vm-etcd3:~$
+```
+
+####
+Хранилище является формата ключ-значение, можно положить в БД, а потом получить. По умолчанию возвращается всегда последнее значение,
+но при указании номера ревизию можно просмотреть нужное значение. Система сохраняет всю историю изменений:
+####
+```sh
+asvpg@vm-etcd1:~$ etcdctl put scott tiger
+OK
+asvpg@vm-etcd1:~$ etcdctl put scott tiger1
+OK
+asvpg@vm-etcd1:~$ etcdctl get scott
+scott
+tiger1
+asvpg@vm-etcd1:~$ etcdctl put scott tiger2
+OK
+asvpg@vm-etcd1:~$ etcdctl get scott
+scott
+tiger2
+asvpg@vm-etcd1:~$ etcdctl get --prefix scott
+scott
+tiger2
+asvpg@vm-etcd1:~$ etcdctl get --prefix scott --rev=2
+scott
+tiger
+asvpg@vm-etcd1:~$
+```
+
+####
+Есть проблематика разрастания размера БД, вследствие чего место рано или поздно закончится.
+Отсюда встает вопрос про компактизацию. Согласно документации она выполняется вручную, можно прописать, до какой ревизии можно удалить историю:
+####
+```sh
+asvpg@vm-etcd1:~$ etcdctl get --prefix scott --rev=2
+scott
+tiger
+asvpg@vm-etcd1:~$ etcdctl get --prefix scott --rev=1
+{"level":"warn","ts":"2026-08-12T19:45:15.986268Z","caller":"clientv3/retry_interceptor.go:62","msg":"retrying of unary invoker failed","target":"etcd-endpoints://0xc0001076c0/127.0.0.1:2379","attempt":0,"error":"rpc error: code = OutOfRange desc = etcdserver: mvcc: required revision has been compacted"}
+Error: etcdserver: mvcc: required revision has been compacted
+asvpg@vm-etcd1:~$
+```
+####
+Здесь видим, что вторая ревизия доступна, а первая уже нет.
+
+Для автоматизации компактизации необходимо задать политику удержания (retention policy).
+Для начала необходимо проверить, включена ли она\выполнялась ли? есть 3 способа.
+####
+```sh
+--1. Проверить в конфиге, но т.к. не настраивали - ничего не увидим
+asvpg@vm-etcd1:~$ cat /etc/default/etcd | grep COMPACTION
+asvpg@vm-etcd1:~$
+--2. Посмотреть в логах - не получилось, надо понять причину
+asvpg@vm-etcd1:~$ journalctl -u etcd | grep -i "compact"
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.
+--3. ЧЕрез метрики - видим информацию:
+asvpg@vm-etcd1:~$
+asvpg@vm-etcd1:~$ curl -s http://127.0.0.1:2379/metrics | grep etcd_debugging_mvcc_compact_revision
+# HELP etcd_debugging_mvcc_compact_revision The revision of the last compaction in store.
+# TYPE etcd_debugging_mvcc_compact_revision gauge
+etcd_debugging_mvcc_compact_revision 2
+asvpg@vm-etcd1:~$
+```
+
+####
+По умолчанию, максимальный размер БД составляет 2 ГБ. Если явно включена квота, то проверяется через следующую команду:
+####
+```sh
+asvpg@vm-etcd1:~$ ps aux | grep etcd | grep quota
+asvpg@vm-etcd1:~$
+```
+####
+В нашем случае квота не задана.
+Параметры очистки (компактизации) можно задать через следующие параметры:
+####
+```sh
+ETCD_AUTO_COMPACTION_RETENTION="8h"
+ETCD_AUTO_COMPACTION_MODE="periodic"
+```
+####
+Т.е. компактизация будет выполняться с периодичностью через каждые 8 часов.
+####
+####
+Если в БД большие объемы, то необходимо настроить ее дефрагментацию - очистить место от старых и уже удаленных данных.
+
+####
+--Есть 2 способа выполнения - локальный, на конкретной ноде:
+```sh
+asvpg@vm-etcd1:~$ etcdctl endpoint status -w table --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|       ENDPOINT       |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| http://vm-etcd1:2379 | fb67a1ba60c76013 |  3.4.30 |   16 kB |     false |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd2:2379 | 9b8dccf1b7e23a6e |  3.4.30 |   20 kB |      true |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd3:2379 | e6178adcaa90b752 |  3.4.30 |   20 kB |     false |      false |        59 |         40 |                 40 |        |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+asvpg@vm-etcd1:~$ etcdctl defrag
+Finished defragmenting etcd member[127.0.0.1:2379]
+asvpg@vm-etcd1:~$ etcdctl endpoint status -w table --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|       ENDPOINT       |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| http://vm-etcd1:2379 | fb67a1ba60c76013 |  3.4.30 |   20 kB |     false |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd2:2379 | 9b8dccf1b7e23a6e |  3.4.30 |   20 kB |      true |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd3:2379 | e6178adcaa90b752 |  3.4.30 |   20 kB |     false |      false |        59 |         40 |                 40 |        |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+
+--На уровне кластера одной командой. Если бд большая, то возможны зависания, блокировки, перевыборы лидера, поэтому есть рекомендация делать вручную на каждой ноде кластера
+asvpg@vm-etcd1:~$ etcdctl defrag --cluster
+Finished defragmenting etcd member[http://10.129.0.17:2379]
+Finished defragmenting etcd member[http://10.129.0.11:2379]
+Finished defragmenting etcd member[http://10.129.0.23:2379]
+asvpg@vm-etcd1:~$
+asvpg@vm-etcd1:~$ etcdctl endpoint status -w table --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|       ENDPOINT       |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| http://vm-etcd1:2379 | fb67a1ba60c76013 |  3.4.30 |   20 kB |     false |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd2:2379 | 9b8dccf1b7e23a6e |  3.4.30 |   20 kB |      true |      false |        59 |         40 |                 40 |        |
+| http://vm-etcd3:2379 | e6178adcaa90b752 |  3.4.30 |   20 kB |     false |      false |        59 |         40 |                 40 |        |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+asvpg@vm-etcd1:~$
+```
+
+####
+Также важным вопросом является отказоустойчивость.
+При 3 нодах кворум - 2. Т.е. при отказе одной ноды кластер продолжит работать.
+Важно помнить, что удаление нод возможно только при живом кластере! Самый простой вариант - поднять любой etcd, добавить новую ноду, а старую отключить. Из 2 нод кластер - не отказоустойчив! Если нода 'отвалилась', но при этом физически жива, то стартуем ее, кластер должен собраться и синхронизироваться. Если нода физически не жива, тогда ее необходимо исключить из кластера и добавить новую ноду и при остановленном сервисе прописать изменения в конфиге.
+
+####
+```sh
+asvpg@vm-etcd1:~$ etcdctl member list
+9b8dccf1b7e23a6e, started, vm-etcd2, http://10.129.0.17:2380, http://10.129.0.17:2379, false
+e6178adcaa90b752, started, vm-etcd3, http://10.129.0.11:2380, http://10.129.0.11:2379, false
+fb67a1ba60c76013, started, vm-etcd1, http://10.129.0.23:2380, http://10.129.0.23:2379, false
+asvpg@vm-etcd1:~$
+```
+####
+После таких изменений требуется рестарт сервиса etcd с последующей проверкой работоспособности:
+####
+```sh
+asvpg@vm-etcd1:~$ sudo systemctl restart etcd
+asvpg@vm-etcd1:~$
+asvpg@vm-etcd1:~$ etcdctl endpoint health --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
+http://vm-etcd1:2379 is healthy: successfully committed proposal: took = 2.686182ms
+http://vm-etcd3:2379 is healthy: successfully committed proposal: took = 2.951778ms
+http://vm-etcd2:2379 is healthy: successfully committed proposal: took = 2.601351ms
+asvpg@vm-etcd1:~$
+asvpg@vm-etcd1:~$ etcdctl endpoint status -w table --endpoints="http://vm-etcd1:2379,http://vm-etcd2:2379,http://vm-etcd3:2379"
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+|       ENDPOINT       |        ID        | VERSION | DB SIZE | IS LEADER | IS LEARNER | RAFT TERM | RAFT INDEX | RAFT APPLIED INDEX | ERRORS |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+| http://vm-etcd1:2379 | fb67a1ba60c76013 |  3.4.30 |   20 kB |      true |      false |        61 |         45 |                 45 |        |
+| http://vm-etcd2:2379 | 9b8dccf1b7e23a6e |  3.4.30 |   20 kB |     false |      false |        61 |         45 |                 45 |        |
+| http://vm-etcd3:2379 | e6178adcaa90b752 |  3.4.30 |   20 kB |     false |      false |        61 |         45 |                 45 |        |
++----------------------+------------------+---------+---------+-----------+------------+-----------+------------+--------------------+--------+
+asvpg@vm-etcd1:~$
+asvpg@vm-etcd1:~$ etcdctl member list
+9b8dccf1b7e23a6e, started, vm-etcd2, http://10.129.0.17:2380, http://10.129.0.17:2379, false
+e6178adcaa90b752, started, vm-etcd3, http://10.129.0.11:2380, http://10.129.0.11:2379, false
+fb67a1ba60c76013, started, vm-etcd1, http://10.129.0.23:2380, http://10.129.0.23:2379, false
+asvpg@vm-etcd1:~$
+```
+
 ###
 Кластер собран
 ###
