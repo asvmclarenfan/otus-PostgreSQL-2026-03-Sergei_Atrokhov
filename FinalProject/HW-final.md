@@ -1107,7 +1107,539 @@ asvpg@vm-etcd1:~$
 ###
 ####
 Задача собрать кластер PostgreSQL из 3 нод (один мастер и две реплики). В качестве источника ВМ используется Yandex Cloud. Настройки по созданию ВМ аналогичны настройкам ВМ кластера etcd, детально создание ВМ для кластера PostgreSQL не рассматривается.
-ВМ создаем в другом ЦОДе ()
+ВМ создаем в другом ЦОДе (ru-central1-d), с теми же системными характеристиками, что и для кластера etcd.
+
+Созданы 3 ВМ со следующими названиями и внутренними IP:
 ####
+```sh
+vm-pg1  10.130.0.13
+vm-pg2  10.130.0.28
+vm-pg3  10.130.0.33
+```
+
+####
+Далее установим необходимое ПО для дальнейшей настройки кластера PostgreSQL.
+Пошаговое описание будет дано для одной ВМ, на остальных всё делалось по аналогии:
+####
+```sh
+--обновляем локальные списки пакетов (package lists) из всех настроенных репозиториев.
+asvpg@vm-pg1:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease [126 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease [126 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Packages [1191 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main Translation-en [282 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Components [180 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:8 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/universe Translation-en [335 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/restricted amd64 Packages [1424 kB]
+Get:12 http://mirror.yandex.ru/ubuntu noble-updates/restricted Translation-en [323 kB]
+Get:13 http://mirror.yandex.ru/ubuntu noble-updates/multiverse Translation-en [12.6 kB]
+Get:14 http://mirror.yandex.ru/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:15 http://mirror.yandex.ru/ubuntu noble-backports/main amd64 Components [5776 B]
+Get:16 http://mirror.yandex.ru/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+Get:17 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [934 kB]
+Get:18 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [202 kB]
+Get:19 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+Get:20 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1201 kB]
+Get:21 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [240 kB]
+Get:22 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.2 kB]
+Get:23 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1329 kB]
+Get:24 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [304 kB]
+Get:25 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [10.9 kB]
+Fetched 10.6 MB in 2s (4777 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+17 packages can be upgraded. Run 'apt list --upgradable' to see them.
+asvpg@vm-pg1:~$
+
+--устанавливаем последние доступные версии всех установленных в системе пакетов. Флаг -y автоматически отвечает «да» на все вопросы установщика (например, подтверждение дискового пространства), а флаг -q включает тихий режим, убирая лишние строки вывода. Это гарантирует, что базовая ОС актуальна и совместима с новыми библиотеками PostgreSQL.
+
+asvpg@vm-pg1:~$ sudo apt upgrade -y -q
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following upgrades have been deferred due to phasing:
+  krb5-locales libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0
+The following packages have been kept back:
+  google-compute-engine-oslogin
+The following packages will be upgraded:
+  libnss-systemd libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd systemd-dev systemd-resolved
+  systemd-sysv systemd-timesyncd udev
+11 upgraded, 0 newly installed, 0 to remove and 6 not upgraded.
+11 standard LTS security updates
+Need to get 8882 kB of archives.
+After this operation, 18.4 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libnss-systemd amd64 255.4-1ubuntu8.17 [159 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-dev all 255.4-1ubuntu8.17 [107 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-timesyncd amd64 255.4-1ubuntu8.17 [35.3 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-resolved amd64 255.4-1ubuntu8.17 [297 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd-shared amd64 255.4-1ubuntu8.17 [2077 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd0 amd64 255.4-1ubuntu8.17 [432 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-sysv amd64 255.4-1ubuntu8.17 [11.9 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libpam-systemd amd64 255.4-1ubuntu8.17 [235 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd amd64 255.4-1ubuntu8.17 [3475 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 udev amd64 255.4-1ubuntu8.17 [1875 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libudev1 amd64 255.4-1ubuntu8.17 [178 kB]
+Fetched 8882 kB in 0s (95.2 MB/s)
+(Reading database ... 106575 files and directories currently installed.)
+Preparing to unpack .../0-libnss-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libnss-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../1-systemd-dev_255.4-1ubuntu8.17_all.deb ...
+Unpacking systemd-dev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../2-systemd-timesyncd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-timesyncd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../3-systemd-resolved_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-resolved (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../4-libsystemd-shared_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd-shared:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../5-libsystemd0_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd0:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libsystemd0:amd64 (255.4-1ubuntu8.17) ...
+(Reading database ... 106575 files and directories currently installed.)
+Preparing to unpack .../systemd-sysv_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-sysv (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libpam-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libpam-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../udev_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking udev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libudev1_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libudev1:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libudev1:amd64 (255.4-1ubuntu8.17) ...
+Setting up systemd-dev (255.4-1ubuntu8.17) ...
+Setting up libsystemd-shared:amd64 (255.4-1ubuntu8.17) ...
+Setting up systemd (255.4-1ubuntu8.17) ...
+Setting up systemd-timesyncd (255.4-1ubuntu8.17) ...
+Setting up udev (255.4-1ubuntu8.17) ...
+Setting up systemd-resolved (255.4-1ubuntu8.17) ...
+Setting up systemd-sysv (255.4-1ubuntu8.17) ...
+Setting up libnss-systemd:amd64 (255.4-1ubuntu8.17) ...
+Setting up libpam-systemd:amd64 (255.4-1ubuntu8.17) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for initramfs-tools (0.142ubuntu25.8) ...
+update-initramfs: Generating /boot/initrd.img-6.8.0-137-generic
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart multipathd.service packagekit.service polkit.service rsyslog.service ssh.service udisks2.service
+
+Service restarts being deferred:
+ systemctl restart ModemManager.service
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: apt[1661], sshd[1080]
+ asvpg @ user manager service: systemd[1090]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg1:~$
 
 
+--Добавление официального репозитория PostgreSQL 17 (принято решение поставить уже проверенное временем ядро СУБД).
+Версии СУБД в стандартных репозиториях Linux-дистрибутивов часто сильно отстают от актуальных. Для получения свежей стабильной ветки (в данном случае — 17-й) официальный сайт Postgres рекомендует подключить собственный репозиторий APT.
+
+Эта команда формирует строку конфигурации репозитория и записывает её в отдельный файл внутри директории /etc/apt/sources.list.d/. 
+
+$(lsb_release -cs) — подстановка короткого названия вашей операционной системы (например, ubuntu24.04 итд). Скрипт динамически определяет нужную папку с пакетами на сервере разработчиков.
+tee позволяет записать вывод echo в файл от имени суперпользователя (sudo), так как обычные пользователи не имеют прав изменять системные конфиги.
+
+asvpg@vm-pg1:~$ echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+deb http://apt.postgresql.org/pub/repos/apt noble-pgdg main
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$ cd /etc/apt/sources.list.d/
+asvpg@vm-pg1:/etc/apt/sources.list.d$ ls -altr
+total 16
+drwxr-xr-x 8 root root 4096 Jun  5  2025 ..
+-rw-r--r-- 1 root root 2987 Aug 13 18:55 ubuntu.sources
+-rw-r--r-- 1 root root   60 Aug 13 19:13 pgdg.list
+drwxr-xr-x 2 root root 4096 Aug 13 19:13 .
+asvpg@vm-pg1:/etc/apt/sources.list.d$ cat pgdg.list
+deb http://apt.postgresql.org/pub/repos/apt noble-pgdg main
+asvpg@vm-pg1:/etc/apt/sources.list.d$
+
+
+--Импорт ключа подписи репозитория.
+Система управления пакетами должна убедиться, что пакеты приходят именно от официального сообщества PostgreSQL, а не были подменены злоумышленником.
+
+wget --quiet -O - скачивает публичный PGP-ключ по ссылке. Флаг --quiet скрывает лог загрузки, а -O - выводит содержимое файла прямо в консоль (стандартный поток вывода).
+Символ трубы | передает этот ключ на вход следующей команде.
+sudo apt-key add - принимает ключ со входа (на что указывает дефис -) и добавляет его в доверенное хранилище ключей текущего сервера. После этого система будет доверять пакетам из добавленного выше репозитория.
+
+Утилита apt-key объявлена устаревшей во многих современных дистрибутивах. Более правильным подходом является сохранение ключа в формате .gpg в директорию /usr/share/keyrings/ и указание параметра signed-by в файле репозитория. Однако классический метод через apt-key add - всё ещё работает.
+
+asvpg@vm-pg1:/etc/apt/sources.list.d$ wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+Warning: apt-key is deprecated. Manage keyring files in trusted.gpg.d instead (see apt-key(8)).
+OK
+asvpg@vm-pg1:/etc/apt/sources.list.d$
+
+
+
+--Синхронизация списков пакетов.
+Заново обновляет списки пакетов, но теперь учитывает ранее добавленный репозиторий pgdg. Если пропустить эту команду, на следующем шаге система попытается установить PostgreSQL из стандартного репозитория Яндекса (где версия почти наверняка будет старее 17-й) или выдаст ошибку, что пакета не существует.
+
+asvpg@vm-pg1:/etc/apt/sources.list.d$ sudo apt-get update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Hit:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease
+Hit:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease
+Get:4 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease [189 kB]
+Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease
+Get:6 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 Packages [790 kB]
+Fetched 979 kB in 1s (1277 kB/s)
+Reading package lists... Done
+W: http://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+asvpg@vm-pg1:/etc/apt/sources.list.d$
+
+
+
+--Установка СУБД PostgreSQL 17.
+Загружает и устанавливает метапакет postgresql-17. Вместе с ним будут установлены:
+
+Основной сервер базы данных;
+Утилиты клиента (psql);
+Дополнительные contrib-модули;
+Пользовательская учетная запись postgres в операционной системе, от имени которой запускаются процессы БД.
+
+Менеджер пакетов автоматически создаст кластер базы данных с настройками по умолчанию, выполнит первичную инициализацию каталога данных (по умолчанию /var/lib/postgresql/17/main) и запустит фоновый процесс сервера. СУБД начнет слушать порт 5432 исключительно на локальном интерфейсе (localhost).
+
+asvpg@vm-pg1:/etc/apt/sources.list.d$ sudo apt -y install postgresql-17
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libcommon-sense-perl libjson-perl libjson-xs-perl libllvm19 libpq5 libtypes-serialiser-perl postgresql-client-17
+  postgresql-client-common postgresql-common ssl-cert
+Suggested packages:
+  libpq-oauth postgresql-doc-17
+The following NEW packages will be installed:
+  libcommon-sense-perl libjson-perl libjson-xs-perl libllvm19 libpq5 libtypes-serialiser-perl postgresql-17
+  postgresql-client-17 postgresql-client-common postgresql-common ssl-cert
+0 upgraded, 11 newly installed, 0 to remove and 6 not upgraded.
+Need to get 48.4 MB of archives.
+After this operation, 201 MB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 libjson-perl all 4.10000-1 [81.9 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 ssl-cert all 1.1.2ubuntu1 [17.8 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 libcommon-sense-perl amd64 3.75-3build3 [20.4 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble/main amd64 libtypes-serialiser-perl all 1.01-1 [11.6 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libjson-xs-perl amd64 4.040-0ubuntu0.24.04.1 [83.7 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libllvm19 amd64 1:19.1.1-1ubuntu1~24.04.2 [28.7 MB]
+Get:7 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-common all 293.pgdg24.04+1 [48.5 kB]
+Get:8 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-common all 293.pgdg24.04+1 [113 kB]
+Get:9 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 libpq5 amd64 18.6-1.pgdg24.04+2 [264 kB]
+Get:10 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-17 amd64 17.11-1.pgdg24.04+2 [2053 kB]
+Get:11 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-17 amd64 17.11-1.pgdg24.04+2 [16.9 MB]
+Fetched 48.4 MB in 1s (77.7 MB/s)
+Preconfiguring packages ...
+Selecting previously unselected package libjson-perl.
+(Reading database ... 106575 files and directories currently installed.)
+Preparing to unpack .../00-libjson-perl_4.10000-1_all.deb ...
+Unpacking libjson-perl (4.10000-1) ...
+Selecting previously unselected package postgresql-client-common.
+Preparing to unpack .../01-postgresql-client-common_293.pgdg24.04+1_all.deb ...
+Unpacking postgresql-client-common (293.pgdg24.04+1) ...
+Selecting previously unselected package ssl-cert.
+Preparing to unpack .../02-ssl-cert_1.1.2ubuntu1_all.deb ...
+Unpacking ssl-cert (1.1.2ubuntu1) ...
+Selecting previously unselected package postgresql-common.
+Preparing to unpack .../03-postgresql-common_293.pgdg24.04+1_all.deb ...
+Adding 'diversion of /usr/bin/pg_config to /usr/bin/pg_config.libpq-dev by postgresql-common'
+Unpacking postgresql-common (293.pgdg24.04+1) ...
+Selecting previously unselected package libcommon-sense-perl:amd64.
+Preparing to unpack .../04-libcommon-sense-perl_3.75-3build3_amd64.deb ...
+Unpacking libcommon-sense-perl:amd64 (3.75-3build3) ...
+Selecting previously unselected package libtypes-serialiser-perl.
+Preparing to unpack .../05-libtypes-serialiser-perl_1.01-1_all.deb ...
+Unpacking libtypes-serialiser-perl (1.01-1) ...
+Selecting previously unselected package libjson-xs-perl.
+Preparing to unpack .../06-libjson-xs-perl_4.040-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking libjson-xs-perl (4.040-0ubuntu0.24.04.1) ...
+Selecting previously unselected package libllvm19:amd64.
+Preparing to unpack .../07-libllvm19_1%3a19.1.1-1ubuntu1~24.04.2_amd64.deb ...
+Unpacking libllvm19:amd64 (1:19.1.1-1ubuntu1~24.04.2) ...
+Selecting previously unselected package libpq5:amd64.
+Preparing to unpack .../08-libpq5_18.6-1.pgdg24.04+2_amd64.deb ...
+Unpacking libpq5:amd64 (18.6-1.pgdg24.04+2) ...
+Selecting previously unselected package postgresql-client-17.
+Preparing to unpack .../09-postgresql-client-17_17.11-1.pgdg24.04+2_amd64.deb ...
+Unpacking postgresql-client-17 (17.11-1.pgdg24.04+2) ...
+Selecting previously unselected package postgresql-17.
+Preparing to unpack .../10-postgresql-17_17.11-1.pgdg24.04+2_amd64.deb ...
+Unpacking postgresql-17 (17.11-1.pgdg24.04+2) ...
+Setting up postgresql-client-common (293.pgdg24.04+1) ...
+Setting up libllvm19:amd64 (1:19.1.1-1ubuntu1~24.04.2) ...
+Setting up libpq5:amd64 (18.6-1.pgdg24.04+2) ...
+Setting up libcommon-sense-perl:amd64 (3.75-3build3) ...
+Setting up ssl-cert (1.1.2ubuntu1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/ssl-cert.service → /usr/lib/systemd/system/ssl-cert.service.
+Setting up libtypes-serialiser-perl (1.01-1) ...
+Setting up libjson-perl (4.10000-1) ...
+Setting up libjson-xs-perl (4.040-0ubuntu0.24.04.1) ...
+Setting up postgresql-client-17 (17.11-1.pgdg24.04+2) ...
+update-alternatives: using /usr/share/postgresql/17/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up postgresql-common (293.pgdg24.04+1) ...
+
+Creating config file /etc/postgresql-common/createcluster.conf with new version
+Building PostgreSQL dictionaries from installed myspell/hunspell packages...
+Removing obsolete dictionary files:
+Created symlink /etc/systemd/system/multi-user.target.wants/postgresql.service → /usr/lib/systemd/system/postgresql.service.
+Setting up postgresql-17 (17.11-1.pgdg24.04+2) ...
+Creating new PostgreSQL cluster 17/main ...
+/usr/lib/postgresql/17/bin/initdb -D /var/lib/postgresql/17/main --auth-local peer --auth-host scram-sha-256 --no-instructions
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "C.UTF-8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /var/lib/postgresql/17/main ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1080]
+ asvpg @ user manager service: systemd[1090]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg1:/etc/apt/sources.list.d$
+```
+
+####
+Далее проверяем, что кластер PostgreSQL создан и стартован на каждой ноде (по умолчанию используется порт 5432):
+####
+```sh
+asvpg@vm-pg1:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 online postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg1:~$
+
+
+asvpg@vm-pg2:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 online postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg2:~$
+
+
+asvpg@vm-pg3:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 online postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg3:~$
+```
+
+####
+На первой ноде (vm-pg1) установим тестовую БД на 6 млн строк:
+####
+```sh
+asvpg@vm-pg1:~$ sudo su postgres
+postgres@vm-pg1:/home/asvpg$ cd ~ && wget https://storage.googleapis.com/thaibus/thai_small.tar.gz && tar -xf thai_small.tar.gz && psql < thai.sql
+--2026-08-13 19:47:48--  https://storage.googleapis.com/thaibus/thai_small.tar.gz
+Resolving storage.googleapis.com (storage.googleapis.com)... 74.125.131.207, 64.233.164.207, 64.233.165.207, ...
+Connecting to storage.googleapis.com (storage.googleapis.com)|74.125.131.207|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 84252589 (80M) [application/x-gzip]
+Saving to: ‘thai_small.tar.gz’
+
+thai_small.tar.gz             100%[=================================================>]  80.35M  23.7MB/s    in 3.7s
+
+2026-08-13 19:47:52 (21.7 MB/s) - ‘thai_small.tar.gz’ saved [84252589/84252589]
+
+SET
+SET
+SET
+SET
+SET
+ set_config
+------------
+
+(1 row)
+
+SET
+SET
+SET
+SET
+CREATE DATABASE
+ALTER DATABASE
+You are now connected to database "thai" as user "postgres".
+SET
+SET
+SET
+SET
+SET
+ set_config
+------------
+
+(1 row)
+
+SET
+SET
+SET
+SET
+CREATE SCHEMA
+ALTER SCHEMA
+SET
+SET
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+CREATE TABLE
+ALTER TABLE
+CREATE SEQUENCE
+ALTER TABLE
+ALTER SEQUENCE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+COPY 5
+COPY 60
+COPY 10
+COPY 111
+COPY 109
+COPY 144000
+COPY 1440
+COPY 200
+COPY 3
+COPY 5185505
+ setval
+--------
+      1
+(1 row)
+
+ setval
+--------
+     60
+(1 row)
+
+ setval
+--------
+      1
+(1 row)
+
+ setval
+--------
+ 144000
+(1 row)
+
+ setval
+--------
+   1440
+(1 row)
+
+ setval
+--------
+    200
+(1 row)
+
+ setval
+--------
+      1
+(1 row)
+
+ setval
+---------
+ 5185505
+(1 row)
+
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+postgres@vm-pg1:~$
+```
+
+####
+Далее создаем реплики. Для этого используем отдельного пользователя repl_user с атрибутом replication. Под системным пользователем postgres делать неправильно.
+####
