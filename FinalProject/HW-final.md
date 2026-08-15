@@ -1972,7 +1972,7 @@ postgres=#
 ```
 
 ###
-Настройка Patroni для автоматического переключения
+3. Настройка Patroni для автоматического переключения
 ###
 
 ####
@@ -2232,5 +2232,531 @@ asvpg@vm-pg3:~$
 ```
 
 ####
-Далее необходимо прописать конфиг.
+Далее необходимо настроить конфиг Patroni на каждой из 3 нод, в котором указываем 3 версию API у ETCD (etcd3), в строке etcd указываем FQDN (полные имена) нод кластера etcd, т.к. они находятся физически в другом ЦОДе. Если указать через короткие имена, то сам кластер etcd будет работать, но кластер Patroni с ним работать не сможет.
+
+В postgresql в строке листенера (listen) можно указывать 2 адрес (127.0.0.1 и внутренний IP), а в patroni нельзя (только один).
+
+Секция bootstrap отработает, когда будет создания на пустом кластере (автоматически создаются пользователи, настраивается pg_hba итд).
+Если создается на уже имеющемся кластере (наш вариант), то все настройки остаются за нами.
+
+Очень важно правильно указать значение параметра bin_dir, т.к. Patroni не знает, где находятся бинарники PG.
+
+Есть 3 типа пользователей: для репликации (repl_user), суперпользователь (postgres), пользователь для pg_rewind.
+
+####
+```sh
+root@vm-pg1:/home/asvpg# cd /etc/patroni/
+root@vm-pg1:/etc/patroni# ls -altr
+total 20
+-rw-r--r--   1 root root  101 Aug 12 21:15 dcs.yml
+-rw-r--r--   1 root root 5341 Aug 12 21:15 config.yml.in
+drwxr-xr-x 109 root root 4096 Aug 15 14:35 ..
+drwxr-xr-x   2 root root 4096 Aug 15 14:35 .
+root@vm-pg1:/etc/patroni# touch config.yml
+root@vm-pg1:/etc/patroni# chmod 600 config.yml
+root@vm-pg1:/etc/patroni# ls -altr
+total 20
+-rw-r--r--   1 root root  101 Aug 12 21:15 dcs.yml
+-rw-r--r--   1 root root 5341 Aug 12 21:15 config.yml.in
+drwxr-xr-x 109 root root 4096 Aug 15 14:35 ..
+-rw-------   1 root root    0 Aug 15 15:17 config.yml
+drwxr-xr-x   2 root root 4096 Aug 15 15:17 .
+root@vm-pg1:/etc/patroni#
+
+root@vm-pg1:/etc/patroni# nano config.yml
+root@vm-pg1:/etc/patroni#
+root@vm-pg1:/etc/patroni# cat config.yml
+scope: patroni
+name: vm-pg1  # hostname -s
+restapi:
+  listen: 10.130.0.13:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.13:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.13:5432
+  connect_address: 10.130.0.13:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+root@vm-pg1:/etc/patroni#
+
+
+root@vm-pg2:/etc/patroni# nano config.yml
+root@vm-pg2:/etc/patroni# cat config.yml
+scope: patroni
+name: vm-pg2  # hostname -s
+restapi:
+  listen: 10.130.0.28:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.28:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.28:5432
+  connect_address: 10.130.0.28:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+root@vm-pg2:/etc/patroni#
+
+
+root@vm-pg3:/etc/patroni# nano config.yml
+root@vm-pg3:/etc/patroni# cat config.yml
+scope: patroni
+name: vm-pg3  # hostname -s
+restapi:
+  listen: 10.130.0.33:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.33:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.33:5432
+  connect_address: 10.130.0.33:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+root@vm-pg3:/etc/patroni#
+```
+
+####
+У суперпользователя postgres меняем пароль, а также создаем пользователей rewind_user, т.к. их нет (сделаем позже)
+####
+```sh
+postgres@vm-pg1:~$ psql
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+postgres=# \du+
+                                    List of roles
+ Role name |                         Attributes                         | Description
+-----------+------------------------------------------------------------+-------------
+ postgres  | Superuser, Create role, Create DB, Replication, Bypass RLS |
+ repl_user | Replication                                                |
+
+postgres=#
+postgres=# alter user postgres with password 'postgres';
+ALTER ROLE
+postgres=#
+```
+
+####
+Останавливаем экземпляры PostgeSQL, т.к. ими будет управлять Patroni и стартуем Patroni. Получаем ошибку.
+####
+```sh
+asvpg@vm-pg1:~$ sudo pg_ctlcluster 17 main stop
+asvpg@vm-pg1:~$ sudo pg_ctlcluster 17 main status
+pg_ctl: no server running
+asvpg@vm-pg1:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 down   postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$ sudo systemctl start patroni
+Job for patroni.service failed because the control process exited with error code.
+See "systemctl status patroni.service" and "journalctl -xeu patroni.service" for details.
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg1:~$ systemctl status patroni.service
+× patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: failed (Result: exit-code) since Sat 2026-08-15 15:47:28 UTC; 1min 4s ago
+    Process: 3896 ExecStart=/usr/bin/patroni /etc/patroni/config.yml (code=exited, status=1/FAILURE)
+   Main PID: 3896 (code=exited, status=1/FAILURE)
+        CPU: 1.226s
+asvpg@vm-pg1:~$
+
+root@vm-pg1:/etc/patroni# sudo journalctl -f -u patroni
+Aug 15 15:47:28 vm-pg1 patroni[3896]: PermissionError: [Errno 13] Permission denied: '/etc/patroni/config.yml'
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Main process exited, code=exited, status=1/FAILURE
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Failed with result 'exit-code'.
+Aug 15 15:47:28 vm-pg1 systemd[1]: Failed to start patroni.service - Runners to orchestrate a high-availability PostgreSQL.
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Consumed 1.226s CPU time.
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Scheduled restart job, restart counter is at 5.
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Start request repeated too quickly.
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Failed with result 'exit-code'.
+Aug 15 15:47:28 vm-pg1 systemd[1]: Failed to start patroni.service - Runners to orchestrate a high-availability PostgreSQL.
+Aug 15 15:47:28 vm-pg1 systemd[1]: patroni.service: Consumed 1.226s CPU time.
+```
+
+####
+Некорректные права, делаем владельцем конфига пользователя postgres
+####
+```sh
+root@vm-pg1:/etc/patroni# chown postgres:postgres /etc/patroni/config.yml
+root@vm-pg1:/etc/patroni#
+root@vm-pg1:/etc/patroni# ls -altr
+total 24
+-rw-r--r--   1 root     root      101 Aug 12 21:15 dcs.yml
+-rw-r--r--   1 root     root     5341 Aug 12 21:15 config.yml.in
+drwxr-xr-x 109 root     root     4096 Aug 15 14:35 ..
+-rw-------   1 postgres postgres 1281 Aug 15 15:52 config.yml
+drwxr-xr-x   2 root     root     4096 Aug 15 15:52 .
+root@vm-pg1:/etc/patroni#
+```
+
+####
+Стартуем сервис заново, проверяем и видим, что сам сервис запущен, но фактически не работает:
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl start patroni
+asvpg@vm-pg1:~$ systemctl status patroni.service
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-08-15 15:57:28 UTC; 14s ago
+   Main PID: 3954 (patroni)
+      Tasks: 17 (limit: 2313)
+     Memory: 30.5M (peak: 32.1M)
+        CPU: 511ms
+     CGroup: /system.slice/patroni.service
+             └─3954 /usr/bin/python3 /usr/bin/patroni /etc/patroni/config.yml
+asvpg@vm-pg1:~$ sudo systemctl status patroni
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-08-15 15:57:28 UTC; 31s ago
+   Main PID: 3954 (patroni)
+      Tasks: 17 (limit: 2313)
+     Memory: 30.5M (peak: 32.3M)
+        CPU: 555ms
+     CGroup: /system.slice/patroni.service
+             └─3954 /usr/bin/python3 /usr/bin/patroni /etc/patroni/config.yml
+
+Aug 15 15:57:59 vm-pg1 patroni[3954]:     ret = self.start(timeout=timeout, block_callbacks=change_role, role=role) or >
+Aug 15 15:57:59 vm-pg1 patroni[3954]:           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 15:57:59 vm-pg1 patroni[3954]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/__init__.py", line 793,>
+Aug 15 15:57:59 vm-pg1 patroni[3954]:     self.config.write_postgresql_conf(configuration)
+Aug 15 15:57:59 vm-pg1 patroni[3954]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/config.py", line 556, i>
+Aug 15 15:57:59 vm-pg1 patroni[3954]:     os.rename(self._postgresql_conf, self._postgresql_base_conf)
+Aug 15 15:57:59 vm-pg1 patroni[3954]: FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/postgresql/17/m>
+Aug 15 15:57:59 vm-pg1 patroni[3996]: localhost:5432 - no response
+Aug 15 15:57:59 vm-pg1 patroni[3954]: 2026-08-15 15:57:59,309 INFO: Lock owner: None; I am vm-pg1
+Aug 15 15:57:59 vm-pg1 patroni[3954]: 2026-08-15 15:57:59,363 INFO: failed to start postgres
+asvpg@vm-pg1:~$
+```
+
+####
+Patroni не смог запустить PostgreSQL, не смог захватить блокировку. Причина - в конфиге Patroni необходимо прописать параметр config_dir, т.к. с новых версий ищет конфиг в директории с данными
+####
+```sh
+postgres@vm-pg1:~$ nano /etc/patroni/config.yml
+postgres@vm-pg1:~$ cat /etc/patroni/config.yml
+scope: patroni
+name: vm-pg1  # hostname -s
+restapi:
+  listen: 10.130.0.13:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.13:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.13:5432
+  connect_address: 10.130.0.13:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  config_dir: /etc/postgresql/17/main
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+postgres@vm-pg1:~$
+
+postgres@vm-pg2:~$ nano /etc/patroni/config.yml
+postgres@vm-pg2:~$ cat /etc/patroni/config.yml
+scope: patroni
+name: vm-pg2  # hostname -s
+restapi:
+  listen: 10.130.0.28:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.28:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.28:5432
+  connect_address: 10.130.0.28:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  config_dir: /etc/postgresql/17/main
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+postgres@vm-pg2:~$
+
+postgres@vm-pg3:~$ nano /etc/patroni/config.yml
+postgres@vm-pg3:~$ cat /etc/patroni/config.yml
+scope: patroni
+name: vm-pg3  # hostname -s
+restapi:
+  listen: 10.130.0.33:8008 #hostname -I | tr -d " "
+  connect_address: 10.130.0.33:8008 #hostname -I | tr -d " "
+etcd3:
+  hosts: vm-etcd1.ru-central1.internal:2379,vm-etcd2.ru-central1.internal:2379,vm-etcd3.ru-central1.internal:2379
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  pg_hba:
+  - host replication repl_user 10.0.0.0/8 md5
+  - host all all 10.0.0.0/8 md5
+  users:
+    admin:
+      password: admin
+      options:
+        - createrole
+        - createdb
+postgresql:
+  listen: 127.0.0.1, 10.130.0.33:5432
+  connect_address: 10.130.0.33:5432
+  data_dir: /var/lib/postgresql/17/main
+  bin_dir: /usr/lib/postgresql/17/bin
+  config_dir: /etc/postgresql/17/main
+  log_directory: /var/log/postgresql
+  pgpass: /tmp/pgpass0
+  authentication:
+    replication:
+      username: repl_user
+      password: repl_user
+    superuser:
+      username: postgres
+      password: postgres
+    rewind:
+      username: rewind_user
+      password: rewind_user
+  parameters:
+    unix_socket_directories: '.'
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+postgres@vm-pg3:~$
+```
+
+####
+Пробуем стартовать сервис patroni еще раз
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl stop patroni
+asvpg@vm-pg1:~$ sudo systemctl start patroni
+asvpg@vm-pg1:~$ sudo systemctl status patroni
+● patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: active (running) since Sat 2026-08-15 16:07:06 UTC; 4s ago
+   Main PID: 4323 (patroni)
+      Tasks: 25 (limit: 2313)
+     Memory: 70.2M (peak: 70.3M)
+        CPU: 1.019s
+     CGroup: /system.slice/patroni.service
+             ├─4323 /usr/bin/python3 /usr/bin/patroni /etc/patroni/config.yml
+             ├─4349 /usr/lib/postgresql/17/bin/postgres -D /var/lib/postgresql/17/main --config-file=/etc/postgresql/17>
+             ├─4351 "postgres: patroni: checkpointer "
+             ├─4352 "postgres: patroni: background writer "
+             ├─4357 "postgres: patroni: postgres postgres 127.0.0.1(57112) idle"
+             ├─4364 "postgres: patroni: walwriter "
+             ├─4365 "postgres: patroni: autovacuum launcher "
+             ├─4366 "postgres: patroni: logical replication launcher "
+             └─4369 "postgres: patroni: walsender repl_user 10.130.0.33(38880) streaming 0/22000E60"
+
+Aug 15 16:07:06 vm-pg1 patroni[4323]: 2026-08-15 16:07:06,813 INFO: promoted self to leader by acquiring session lock
+Aug 15 16:07:06 vm-pg1 patroni[4362]: server promoting
+Aug 15 16:07:06 vm-pg1 patroni[4353]: 2026-08-15 16:07:06.815 UTC [4353] LOG:  received promote request
+Aug 15 16:07:06 vm-pg1 patroni[4353]: 2026-08-15 16:07:06.815 UTC [4353] LOG:  redo is not required
+Aug 15 16:07:06 vm-pg1 patroni[4353]: 2026-08-15 16:07:06.831 UTC [4353] LOG:  selected new timeline ID: 2
+Aug 15 16:07:06 vm-pg1 patroni[4353]: 2026-08-15 16:07:06.967 UTC [4353] LOG:  archive recovery complete
+Aug 15 16:07:07 vm-pg1 patroni[4351]: 2026-08-15 16:07:07.077 UTC [4351] LOG:  checkpoint starting: force
+Aug 15 16:07:07 vm-pg1 patroni[4349]: 2026-08-15 16:07:07.081 UTC [4349] LOG:  database system is ready to accept conne>
+Aug 15 16:07:07 vm-pg1 patroni[4351]: 2026-08-15 16:07:07.120 UTC [4351] LOG:  checkpoint complete: wrote 3 buffers (0.>
+Aug 15 16:07:08 vm-pg1 patroni[4323]: 2026-08-15 16:07:08,105 INFO: no action. I am (vm-pg1), the leader with the lock
+asvpg@vm-pg1:~$
+```
+
+####
+Блокировка получена, БД стартовала, кластер настроен.
 ####
