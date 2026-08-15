@@ -1641,5 +1641,596 @@ postgres@vm-pg1:~$
 ```
 
 ####
-Далее создаем реплики. Для этого используем отдельного пользователя repl_user с атрибутом replication. Под системным пользователем postgres делать неправильно.
+Далее создаем реплики. Для этого используем отдельного пользователя repl_user с атрибутом replication. Выполнение настроек под системным пользователем postgres считается неправильным.
+####
+```sh
+postgres@vm-pg1:~$ psql -c "create user repl_user with replication login password 'repl_user';"
+CREATE ROLE
+postgres@vm-pg1:~$
+```
+
+####
+Останавливаем 2 и 3 ноды БД
+####
+```sh
+asvpg@vm-pg2:~$ sudo pg_ctlcluster 17 main stop
+asvpg@vm-pg2:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 down   postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo pg_ctlcluster 17 main stop
+asvpg@vm-pg3:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 down   postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+asvpg@vm-pg3:~$
+```
+####
+Удаляем каталог с данными
+####
+```sh
+postgres@vm-pg2:~$ ls -altr /var/lib/postgresql/17/main
+total 88
+drwxr-xr-x  3 postgres postgres 4096 Aug 13 19:36 ..
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_twophase
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_tblspc
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_snapshots
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_serial
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_replslot
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_notify
+drwx------  4 postgres postgres 4096 Aug 13 19:36 pg_multixact
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_dynshmem
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_commit_ts
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_stat_tmp
+-rw-------  1 postgres postgres    3 Aug 13 19:36 PG_VERSION
+-rw-------  1 postgres postgres   88 Aug 13 19:36 postgresql.auto.conf
+drwx------  4 postgres postgres 4096 Aug 13 19:36 pg_wal
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_xact
+drwx------  2 postgres postgres 4096 Aug 13 19:36 pg_subtrans
+drwx------  5 postgres postgres 4096 Aug 13 19:36 base
+-rw-------  1 postgres postgres  130 Aug 15 13:28 postmaster.opts
+drwx------  2 postgres postgres 4096 Aug 15 13:28 global
+drwx------  4 postgres postgres 4096 Aug 15 13:41 pg_logical
+drwx------  2 postgres postgres 4096 Aug 15 13:41 pg_stat
+drwx------ 19 postgres postgres 4096 Aug 15 13:41 .
+postgres@vm-pg2:~$ rm -rf /var/lib/postgresql/17/main
+postgres@vm-pg2:~$ ls -altr /var/lib/postgresql/17/main
+ls: cannot access '/var/lib/postgresql/17/main': No such file or directory
+postgres@vm-pg2:~$
+
+
+postgres@vm-pg3:~$ ls -altr /var/lib/postgresql/17/main
+total 88
+drwxr-xr-x  3 postgres postgres 4096 Aug 13 19:25 ..
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_twophase
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_tblspc
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_stat_tmp
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_snapshots
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_serial
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_replslot
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_notify
+drwx------  4 postgres postgres 4096 Aug 13 19:25 pg_multixact
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_dynshmem
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_commit_ts
+-rw-------  1 postgres postgres    3 Aug 13 19:25 PG_VERSION
+-rw-------  1 postgres postgres   88 Aug 13 19:25 postgresql.auto.conf
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_xact
+drwx------  4 postgres postgres 4096 Aug 13 19:25 pg_wal
+drwx------  2 postgres postgres 4096 Aug 13 19:25 pg_subtrans
+drwx------  5 postgres postgres 4096 Aug 13 19:25 base
+-rw-------  1 postgres postgres  130 Aug 15 13:28 postmaster.opts
+drwx------  2 postgres postgres 4096 Aug 15 13:28 global
+drwx------  4 postgres postgres 4096 Aug 15 13:42 pg_logical
+drwx------  2 postgres postgres 4096 Aug 15 13:42 pg_stat
+drwx------ 19 postgres postgres 4096 Aug 15 13:42 .
+postgres@vm-pg3:~$
+postgres@vm-pg3:~$ rm -rf /var/lib/postgresql/17/main
+postgres@vm-pg3:~$
+postgres@vm-pg3:~$ ls -altr /var/lib/postgresql/17/main
+ls: cannot access '/var/lib/postgresql/17/main': No such file or directory
+postgres@vm-pg3:~$
+```
+####
+Далее настраиваем сетевой доступ к БД через конфиг pg_hba (файервол). Также настраиваем листенер (по умолчанию не разрешает доступ).
+На первой ноде разрешим сетевой доступ для бэкапа. Указываем всегда только внутренние IP адрес (открываем только внутреннюю сеть), не внешние!
+Для листенера прописываем localhost (иначе не сможем подключиться с локального хоста) и внутренний адрес ноды. * не ставим, иначе внешние IP также будут доступны.
+####
+```sh
+postgres@vm-pg1:~$ nano /etc/postgresql/17/main/pg_hba.conf
+postgres@vm-pg1:~$ cat /etc/postgresql/17/main/pg_hba.conf
+# PostgreSQL Client Authentication Configuration File
+# ===================================================
+...
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            scram-sha-256
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             10.0.0.0/8            scram-sha-256  --!!!
+host    replication     all             ::1/128                 scram-sha-256
+postgres@vm-pg1:~$
+
+postgres@vm-pg1:~$ nano /etc/postgresql/17/main/postgresql.conf
+postgres@vm-pg1:~$ cat /etc/postgresql/17/main/postgresql.conf
+# -----------------------------
+# PostgreSQL configuration file
+# -----------------------------
+#
+# This file consists of lines of the form:
+#
+#   name = value
+#
+...
+#------------------------------------------------------------------------------
+# FILE LOCATIONS
+#------------------------------------------------------------------------------
+
+# The default values of these variables are driven from the -D command-line
+# option or PGDATA environment variable, represented here as ConfigDir.
+
+data_directory = '/var/lib/postgresql/17/main'          # use data in another directory
+                                        # (change requires restart)
+hba_file = '/etc/postgresql/17/main/pg_hba.conf'        # host-based authentication file
+                                        # (change requires restart)
+ident_file = '/etc/postgresql/17/main/pg_ident.conf'    # ident configuration file
+                                        # (change requires restart)
+
+# If external_pid_file is not explicitly set, no extra PID file is written.
+external_pid_file = '/var/run/postgresql/17-main.pid'                   # write an extra PID file
+                                        # (change requires restart)
+
+
+#------------------------------------------------------------------------------
+# CONNECTIONS AND AUTHENTICATION
+#------------------------------------------------------------------------------
+
+# - Connection Settings -
+
+listen_addresses = 'localhost, 10.130.0.13'             # what IP address(es) to listen on; --!!!
+                                        # comma-separated list of addresses;
+                                        # defaults to 'localhost'; use '*' for all
+                                        # (change requires restart)
+port = 5432                             # (change requires restart)
+```
+####
+Изменения в ph_hba требуют перезагрузки конфигурации, а листенер - рестарт кластера БД (через стоп и старт)
+####
+```sh
+postgres@vm-pg1:~$ pg_ctlcluster stop 17 main && pg_ctlcluster start 17 main
+Warning: stopping the cluster using pg_ctlcluster will mark the systemd unit as failed. Consider using systemctl:
+  sudo systemctl stop postgresql@17-main
+Warning: the cluster will not be running as a systemd service. Consider using systemctl:
+  sudo systemctl start postgresql@17-main
+postgres@vm-pg1:~$ pg_lsclusters
+Ver Cluster Port Status Owner    Data directory              Log file
+17  main    5432 online postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+postgres@vm-pg1:~$
+
+postgres@vm-pg1:~$ psql
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+postgres=# show listen_addresses;
+    listen_addresses
+------------------------
+ localhost, 10.130.0.13
+(1 row)
+
+postgres=#
+```
+
+####
+Первая нода PG готова к снятию реплики.
+На второй и третьем нодах выполняем подключение к первой ноде и для снятия бэкапа через утилиту pg_basebackup без создания слота.
+Команду необходимо выполнять обязательно под пользователем postgres, а не через sudo -u, иначе будут присвоены некорректные права root,
+после чего будут ошибки в работе.
+Указываем пароль ранее созданного пользователя repl_user. Система может ожидать прихода checkpoint. Для ускорения можно выполнить его вручную рна первой ноде. Время выполнения физического бэкапа намного меньше, чем заливка через дамп (copy).
+####
+```sh
+postgres@vm-pg2:~$ pg_lsclusters
+Ver Cluster Port Status Owner     Data directory              Log file
+17  main    5432 down   <unknown> /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+postgres@vm-pg2:~$
+postgres@vm-pg2:~$ pg_basebackup -R -h 10.130.0.13 -D /var/lib/postgresql/17/main -P -U repl_user
+Password:
+626636/626636 kB (100%), 1/1 tablespace
+postgres@vm-pg2:~$
+postgres@vm-pg2:~$ ls -altr /var/lib/postgresql/17/main
+total 272
+drwxr-xr-x  3 postgres postgres   4096 Aug 15 14:16 ..
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_xact
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_stat
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_notify
+-rw-------  1 postgres postgres    227 Aug 15 14:16 backup_label
+drwx------  4 postgres postgres   4096 Aug 15 14:16 pg_wal
+drwx------  4 postgres postgres   4096 Aug 15 14:16 pg_logical
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_commit_ts
+-rw-------  1 postgres postgres      3 Aug 15 14:16 PG_VERSION
+drwx------  4 postgres postgres   4096 Aug 15 14:16 pg_multixact
+-rw-------  1 postgres postgres    415 Aug 15 14:16 postgresql.auto.conf
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_tblspc
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_subtrans
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_stat_tmp
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_serial
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_replslot
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_dynshmem
+drwx------  6 postgres postgres   4096 Aug 15 14:16 base
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_twophase
+drwx------  2 postgres postgres   4096 Aug 15 14:16 pg_snapshots
+drwx------  2 postgres postgres   4096 Aug 15 14:16 global
+-rw-------  1 postgres postgres      0 Aug 15 14:16 standby.signal
+-rw-------  1 postgres postgres 187039 Aug 15 14:16 backup_manifest
+drwx------ 19 postgres postgres   4096 Aug 15 14:17 .
+postgres@vm-pg2:~$
+
+postgres@vm-pg3:~$ pg_lsclusters
+Ver Cluster Port Status Owner     Data directory              Log file
+17  main    5432 down   <unknown> /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+postgres@vm-pg3:~$
+postgres@vm-pg3:~$ pg_basebackup -R -h 10.130.0.13 -D /var/lib/postgresql/17/main -P -U repl_user
+Password:
+626636/626636 kB (100%), 1/1 tablespace
+postgres@vm-pg3:~$
+postgres@vm-pg3:~$ ls -altr /var/lib/postgresql/17/main
+total 272
+drwxr-xr-x  3 postgres postgres   4096 Aug 15 14:23 ..
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_stat
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_notify
+-rw-------  1 postgres postgres    227 Aug 15 14:23 backup_label
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_xact
+drwx------  4 postgres postgres   4096 Aug 15 14:23 pg_wal
+drwx------  4 postgres postgres   4096 Aug 15 14:23 pg_logical
+-rw-------  1 postgres postgres    415 Aug 15 14:23 postgresql.auto.conf
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_tblspc
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_subtrans
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_stat_tmp
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_serial
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_replslot
+drwx------  4 postgres postgres   4096 Aug 15 14:23 pg_multixact
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_dynshmem
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_commit_ts
+-rw-------  1 postgres postgres      3 Aug 15 14:23 PG_VERSION
+drwx------  6 postgres postgres   4096 Aug 15 14:23 base
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_twophase
+drwx------  2 postgres postgres   4096 Aug 15 14:23 pg_snapshots
+-rw-------  1 postgres postgres      0 Aug 15 14:23 standby.signal
+drwx------  2 postgres postgres   4096 Aug 15 14:23 global
+-rw-------  1 postgres postgres 187039 Aug 15 14:23 backup_manifest
+drwx------ 19 postgres postgres   4096 Aug 15 14:23 .
+postgres@vm-pg3:~$
+```
+
+####
+Выполняем старт PG на второй и третьей нодах
+####
+```sh
+postgres@vm-pg2:~$ pg_ctlcluster 17 main start
+Warning: the cluster will not be running as a systemd service. Consider using systemctl:
+  sudo systemctl start postgresql@17-main
+postgres@vm-pg2:~$ pg_lsclusters
+Ver Cluster Port Status          Owner    Data directory              Log file
+17  main    5432 online,recovery postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+postgres@vm-pg2:~$
+
+postgres@vm-pg3:~$ pg_ctlcluster 17 main start
+Warning: the cluster will not be running as a systemd service. Consider using systemctl:
+  sudo systemctl start postgresql@17-main
+postgres@vm-pg3:~$ pg_lsclusters
+Ver Cluster Port Status          Owner    Data directory              Log file
+17  main    5432 online,recovery postgres /var/lib/postgresql/17/main /var/log/postgresql/postgresql-17-main.log
+postgres@vm-pg3:~$
+```
+
+####
+Настройка кластера завершена: 1 мастер и 2 реплики. Физическая репликация настроена.
+####
+```sh
+postgres@vm-pg1:~$ psql
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+postgres=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+postgres=#
+
+postgres@vm-pg2:~$ psql
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+postgres=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ t
+(1 row)
+
+postgres=#
+
+postgres@vm-pg3:~$ psql
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+postgres=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ t
+(1 row)
+
+postgres=#
+```
+
+###
+Настройка Patroni для автоматического переключения
+###
+
+####
+Устанавливаем patroni из пакетов на каждой из трех нод. Если требуется конкретная версия, то можно поставить из python, с использованием pip
+####
+```sh
+asvpg@vm-pg1:~$ sudo apt install patroni -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2 python3-wcwidth
+Suggested packages:
+  postgresql etcd-server | consul | zookeeperd vip-manager haproxy patroni-doc python3-trio python3-aioquic python3-h2
+  python3-httpx python3-httpcore etcd python-psycopg2-doc
+The following NEW packages will be installed:
+  patroni python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2
+  python3-wcwidth
+0 upgraded, 8 newly installed, 0 to remove and 6 not upgraded.
+Need to get 877 kB of archives.
+After this operation, 5469 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-wcwidth all 0.2.5+dfsg1-1.1ubuntu1 [22.5 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-prettytable all 3.6.0-2 [32.8 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-psutil amd64 5.9.8-2build2 [195 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-dnspython all 2.6.1-1ubuntu1 [163 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-etcd all 0.4.5-4 [31.9 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-cdiff all 1.0-1.1 [16.4 kB]
+Get:7 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 python3-psycopg2 amd64 2.9.10-1.pgdg24.04+1 [123 kB]
+Get:8 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 patroni all 4.1.5-1.pgdg24.04+1 [291 kB]
+Fetched 877 kB in 0s (2859 kB/s)
+Selecting previously unselected package python3-wcwidth.
+(Reading database ... 108856 files and directories currently installed.)
+Preparing to unpack .../0-python3-wcwidth_0.2.5+dfsg1-1.1ubuntu1_all.deb ...
+Unpacking python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Selecting previously unselected package python3-prettytable.
+Preparing to unpack .../1-python3-prettytable_3.6.0-2_all.deb ...
+Unpacking python3-prettytable (3.6.0-2) ...
+Selecting previously unselected package python3-psutil.
+Preparing to unpack .../2-python3-psutil_5.9.8-2build2_amd64.deb ...
+Unpacking python3-psutil (5.9.8-2build2) ...
+Selecting previously unselected package python3-psycopg2.
+Preparing to unpack .../3-python3-psycopg2_2.9.10-1.pgdg24.04+1_amd64.deb ...
+Unpacking python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Selecting previously unselected package python3-dnspython.
+Preparing to unpack .../4-python3-dnspython_2.6.1-1ubuntu1_all.deb ...
+Unpacking python3-dnspython (2.6.1-1ubuntu1) ...
+Selecting previously unselected package python3-etcd.
+Preparing to unpack .../5-python3-etcd_0.4.5-4_all.deb ...
+Unpacking python3-etcd (0.4.5-4) ...
+Selecting previously unselected package python3-cdiff.
+Preparing to unpack .../6-python3-cdiff_1.0-1.1_all.deb ...
+Unpacking python3-cdiff (1.0-1.1) ...
+Selecting previously unselected package patroni.
+Preparing to unpack .../7-patroni_4.1.5-1.pgdg24.04+1_all.deb ...
+Unpacking patroni (4.1.5-1.pgdg24.04+1) ...
+Setting up python3-cdiff (1.0-1.1) ...
+Setting up python3-psutil (5.9.8-2build2) ...
+Setting up python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Setting up python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Setting up python3-dnspython (2.6.1-1ubuntu1) ...
+Setting up python3-prettytable (3.6.0-2) ...
+Setting up python3-etcd (0.4.5-4) ...
+Setting up patroni (4.1.5-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/patroni.service → /usr/lib/systemd/system/patroni.service.
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo apt install patroni -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2 python3-wcwidth
+Suggested packages:
+  postgresql etcd-server | consul | zookeeperd vip-manager haproxy patroni-doc python3-trio python3-aioquic python3-h2
+  python3-httpx python3-httpcore etcd python-psycopg2-doc
+The following NEW packages will be installed:
+  patroni python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2
+  python3-wcwidth
+0 upgraded, 8 newly installed, 0 to remove and 1 not upgraded.
+Need to get 877 kB of archives.
+After this operation, 5469 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-wcwidth all 0.2.5+dfsg1-1.1ubuntu1 [22.5 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-prettytable all 3.6.0-2 [32.8 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-psutil amd64 5.9.8-2build2 [195 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-dnspython all 2.6.1-1ubuntu1 [163 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-etcd all 0.4.5-4 [31.9 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-cdiff all 1.0-1.1 [16.4 kB]
+Get:7 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 python3-psycopg2 amd64 2.9.10-1.pgdg24.04+1 [123 kB]
+Get:8 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 patroni all 4.1.5-1.pgdg24.04+1 [291 kB]
+Fetched 877 kB in 0s (4262 kB/s)
+Selecting previously unselected package python3-wcwidth.
+(Reading database ... 108856 files and directories currently installed.)
+Preparing to unpack .../0-python3-wcwidth_0.2.5+dfsg1-1.1ubuntu1_all.deb ...
+Unpacking python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Selecting previously unselected package python3-prettytable.
+Preparing to unpack .../1-python3-prettytable_3.6.0-2_all.deb ...
+Unpacking python3-prettytable (3.6.0-2) ...
+Selecting previously unselected package python3-psutil.
+Preparing to unpack .../2-python3-psutil_5.9.8-2build2_amd64.deb ...
+Unpacking python3-psutil (5.9.8-2build2) ...
+Selecting previously unselected package python3-psycopg2.
+Preparing to unpack .../3-python3-psycopg2_2.9.10-1.pgdg24.04+1_amd64.deb ...
+Unpacking python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Selecting previously unselected package python3-dnspython.
+Preparing to unpack .../4-python3-dnspython_2.6.1-1ubuntu1_all.deb ...
+Unpacking python3-dnspython (2.6.1-1ubuntu1) ...
+Selecting previously unselected package python3-etcd.
+Preparing to unpack .../5-python3-etcd_0.4.5-4_all.deb ...
+Unpacking python3-etcd (0.4.5-4) ...
+Selecting previously unselected package python3-cdiff.
+Preparing to unpack .../6-python3-cdiff_1.0-1.1_all.deb ...
+Unpacking python3-cdiff (1.0-1.1) ...
+Selecting previously unselected package patroni.
+Preparing to unpack .../7-patroni_4.1.5-1.pgdg24.04+1_all.deb ...
+Unpacking patroni (4.1.5-1.pgdg24.04+1) ...
+Setting up python3-cdiff (1.0-1.1) ...
+Setting up python3-psutil (5.9.8-2build2) ...
+Setting up python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Setting up python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Setting up python3-dnspython (2.6.1-1ubuntu1) ...
+Setting up python3-prettytable (3.6.0-2) ...
+Setting up python3-etcd (0.4.5-4) ...
+Setting up patroni (4.1.5-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/patroni.service → /usr/lib/systemd/system/patroni.service.
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo apt install patroni -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2 python3-wcwidth
+Suggested packages:
+  postgresql etcd-server | consul | zookeeperd vip-manager haproxy patroni-doc python3-trio python3-aioquic python3-h2
+  python3-httpx python3-httpcore etcd python-psycopg2-doc
+The following NEW packages will be installed:
+  patroni python3-cdiff python3-dnspython python3-etcd python3-prettytable python3-psutil python3-psycopg2
+  python3-wcwidth
+0 upgraded, 8 newly installed, 0 to remove and 6 not upgraded.
+Need to get 877 kB of archives.
+After this operation, 5469 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-wcwidth all 0.2.5+dfsg1-1.1ubuntu1 [22.5 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-prettytable all 3.6.0-2 [32.8 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-psutil amd64 5.9.8-2build2 [195 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble/main amd64 python3-dnspython all 2.6.1-1ubuntu1 [163 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-etcd all 0.4.5-4 [31.9 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble/universe amd64 python3-cdiff all 1.0-1.1 [16.4 kB]
+Get:7 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 python3-psycopg2 amd64 2.9.10-1.pgdg24.04+1 [123 kB]
+Get:8 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 patroni all 4.1.5-1.pgdg24.04+1 [291 kB]
+Fetched 877 kB in 0s (3583 kB/s)
+Selecting previously unselected package python3-wcwidth.
+(Reading database ... 108856 files and directories currently installed.)
+Preparing to unpack .../0-python3-wcwidth_0.2.5+dfsg1-1.1ubuntu1_all.deb ...
+Unpacking python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Selecting previously unselected package python3-prettytable.
+Preparing to unpack .../1-python3-prettytable_3.6.0-2_all.deb ...
+Unpacking python3-prettytable (3.6.0-2) ...
+Selecting previously unselected package python3-psutil.
+Preparing to unpack .../2-python3-psutil_5.9.8-2build2_amd64.deb ...
+Unpacking python3-psutil (5.9.8-2build2) ...
+Selecting previously unselected package python3-psycopg2.
+Preparing to unpack .../3-python3-psycopg2_2.9.10-1.pgdg24.04+1_amd64.deb ...
+Unpacking python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Selecting previously unselected package python3-dnspython.
+Preparing to unpack .../4-python3-dnspython_2.6.1-1ubuntu1_all.deb ...
+Unpacking python3-dnspython (2.6.1-1ubuntu1) ...
+Selecting previously unselected package python3-etcd.
+Preparing to unpack .../5-python3-etcd_0.4.5-4_all.deb ...
+Unpacking python3-etcd (0.4.5-4) ...
+Selecting previously unselected package python3-cdiff.
+Preparing to unpack .../6-python3-cdiff_1.0-1.1_all.deb ...
+Unpacking python3-cdiff (1.0-1.1) ...
+Selecting previously unselected package patroni.
+Preparing to unpack .../7-patroni_4.1.5-1.pgdg24.04+1_all.deb ...
+Unpacking patroni (4.1.5-1.pgdg24.04+1) ...
+Setting up python3-cdiff (1.0-1.1) ...
+Setting up python3-psutil (5.9.8-2build2) ...
+Setting up python3-wcwidth (0.2.5+dfsg1-1.1ubuntu1) ...
+Setting up python3-psycopg2 (2.9.10-1.pgdg24.04+1) ...
+Setting up python3-dnspython (2.6.1-1ubuntu1) ...
+Setting up python3-prettytable (3.6.0-2) ...
+Setting up python3-etcd (0.4.5-4) ...
+Setting up patroni (4.1.5-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/patroni.service → /usr/lib/systemd/system/patroni.service.
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg3:~$
+```
+
+####
+Проверяем, что сервис установлен и стартован
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl status patroni
+○ patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: inactive (dead)
+  Condition: start condition unmet at Sat 2026-08-15 14:35:50 UTC; 3min 40s ago
+             └─ ConditionPathExists=/etc/patroni/config.yml was not met
+
+Aug 15 14:35:50 vm-pg1 systemd[1]: patroni.service - Runners to orchestrate a high-availability PostgreSQL was skipped >
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo systemctl status patroni
+○ patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: inactive (dead)
+  Condition: start condition unmet at Sat 2026-08-15 14:37:19 UTC; 3min 4s ago
+             └─ ConditionPathExists=/etc/patroni/config.yml was not met
+
+Aug 15 14:37:19 vm-pg2 systemd[1]: patroni.service - Runners to orchestrate a high-availability PostgreSQL was skipped >
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo systemctl status patroni
+○ patroni.service - Runners to orchestrate a high-availability PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/patroni.service; enabled; preset: enabled)
+     Active: inactive (dead)
+  Condition: start condition unmet at Sat 2026-08-15 14:38:29 UTC; 2min 16s ago
+             └─ ConditionPathExists=/etc/patroni/config.yml was not met
+
+Aug 15 14:38:29 vm-pg3 systemd[1]: patroni.service - Runners to orchestrate a high-availability PostgreSQL was skipped >
+asvpg@vm-pg3:~$
+```
+
+####
+Далее необходимо прописать конфиг.
 ####
