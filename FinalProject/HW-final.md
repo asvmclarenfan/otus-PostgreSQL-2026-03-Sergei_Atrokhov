@@ -3128,3 +3128,271 @@ Password for user postgres:
 
 asvpg@vm-pg3:~$
 ```
+
+####
+Есть возможность выполнить рестарт ноды кластера Patroni
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml restart patroni vm-pg2
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+When should the restart take place (e.g. 2026-08-15T21:17)  [now]:
+Are you sure you want to restart members vm-pg2? [y/N]: y
+Restart if the PostgreSQL version is less than provided (e.g. 9.5.2)  []:
+Success: restart on member vm-pg2
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+```
+
+####
+Можно выполнить плановое переключение
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml switchover
+Current cluster topology
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/24000168 |   0 | 0/24000168 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+Primary [vm-pg1]:
+Candidate ['vm-pg2', 'vm-pg3'] []: vm-pg2
+When should the switchover take place (e.g. 2026-08-15T21:20 )  [now]:
+Are you sure you want to switchover cluster patroni, demoting current leader vm-pg1? [y/N]: y
+2026-08-15 20:20:18.63812 Successfully switched over to "vm-pg2"
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | stopped |    |     unknown |     |    unknown |     |
+| vm-pg2 | 10.130.0.28 | Leader  | running |  3 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | running |  3 |  0/240002B0 |   0 | 0/240002B0 |   0 |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | running |  3 |  0/24000000 |   0 | 0/240002B0 |   0 |
+| vm-pg2 | 10.130.0.28 | Leader  | running |  4 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | running |  3 |  0/240002B0 |   0 | 0/240002B0 |   0 |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+```
+
+####
+При смене лидера происходит инкремент TL. Если это не произошло на всех нодах кластера, значит скорее всего есть ошибки в настройке pg_hba. Смотрим логи и исправляем
+####
+```sh
+asvpg@vm-pg1:~$ sudo journalctl -u patroni.service -n 50 -f
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3.12/contextlib.py", line 137, in __enter__
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     return next(self.gen)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/__init__.py", line 1114, in get_replication_connection_cursor
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     with get_connection_cursor(**conn_kwargs) as cur:
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3.12/contextlib.py", line 137, in __enter__
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     return next(self.gen)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/connection.py", line 164, in get_connection_cursor
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     conn = psycopg.connect(**conn_kwargs)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/psycopg.py", line 150, in connect
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     ret = _connect(*args, **kwargs)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:           ^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/psycopg2/__init__.py", line 122, in connect
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]: psycopg2.OperationalError: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", SSL encryption
+Aug 15 20:23:09 vm-pg1 patroni[6827]: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", no encryption
+Aug 15 20:23:09 vm-pg1 patroni[6827]: 2026-08-15 20:23:09,864 INFO: Local timeline=3 lsn=0/240002B0
+Aug 15 20:23:09 vm-pg1 patroni[6827]: 2026-08-15 20:23:09,892 ERROR: Exception when working with primary via replication connection
+Aug 15 20:23:09 vm-pg1 patroni[6827]: Traceback (most recent call last):
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/rewind.py", line 253, in _check_timeline_and_lsn
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     with self._postgresql.get_replication_connection_cursor(**leader.conn_kwargs()) as cur:
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3.12/contextlib.py", line 137, in __enter__
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     return next(self.gen)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/__init__.py", line 1114, in get_replication_connection_cursor
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     with get_connection_cursor(**conn_kwargs) as cur:
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3.12/contextlib.py", line 137, in __enter__
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     return next(self.gen)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/postgresql/connection.py", line 164, in get_connection_cursor
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     conn = psycopg.connect(**conn_kwargs)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/patroni/psycopg.py", line 150, in connect
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     ret = _connect(*args, **kwargs)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:           ^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]:   File "/usr/lib/python3/dist-packages/psycopg2/__init__.py", line 122, in connect
+Aug 15 20:23:09 vm-pg1 patroni[6827]:     conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+Aug 15 20:23:09 vm-pg1 patroni[6827]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aug 15 20:23:09 vm-pg1 patroni[6827]: psycopg2.OperationalError: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", SSL encryption
+Aug 15 20:23:09 vm-pg1 patroni[6827]: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", no encryption
+Aug 15 20:23:09 vm-pg1 patroni[6827]: 2026-08-15 20:23:09,960 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 15 20:23:10 vm-pg1 patroni[9148]: 2026-08-15 20:23:10.626 UTC [9148] FATAL:  could not connect to the primary server: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", SSL encryption
+Aug 15 20:23:10 vm-pg1 patroni[9148]:         connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", no encryption
+Aug 15 20:23:10 vm-pg1 patroni[9010]: 2026-08-15 20:23:10.627 UTC [9010] LOG:  waiting for WAL to become available at 0/240002C8
+Aug 15 20:23:15 vm-pg1 patroni[9149]: 2026-08-15 20:23:15.631 UTC [9149] FATAL:  could not connect to the primary server: connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", SSL encryption
+Aug 15 20:23:15 vm-pg1 patroni[9149]:         connection to server at "10.130.0.28", port 5432 failed: FATAL:  no pg_hba.conf entry for replication connection from host "10.130.0.13", user "repl_user", no encryption
+Aug 15 20:23:15 vm-pg1 patroni[9010]: 2026-08-15 20:23:15.632 UTC [9010] LOG:  waiting for WAL to become available at 0/240002C8
+
+
+asvpg@vm-pg1:~$ sudo nano /etc/postgresql/17/main/pg_hba.conf
+asvpg@vm-pg1:~$ sudo cat /etc/postgresql/17/main/pg_hba.conf
+# PostgreSQL Client Authentication Configuration File
+# ===================================================
+...
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            scram-sha-256
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+host    all         rewind_user         10.0.0.0/8              scram-sha-256
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             10.0.0.0/8              scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     repl_user       10.0.0.0/8              scram-sha-256
+asvpg@vm-pg1:~$
+
+--на каждой ноде в конфиге pg_hba добавляем следующую строку:
+host    replication     repl_user       10.0.0.0/8              scram-sha-256
+
+--ниже представлены все записи в конфиге pg_hba
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            scram-sha-256
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+host    all         rewind_user         10.0.0.0/8              scram-sha-256
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+host    replication     repl_user       10.0.0.0/8              scram-sha-256
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+host    replication     all             10.0.0.0/8              scram-sha-256
+
+asvpg@vm-pg1:~$ sudo nano /etc/postgresql/17/main/pg_hba.conf
+asvpg@vm-pg1:~$ sudo pg_ctlcluster 17 main reload
+
+asvpg@vm-pg2:~$ sudo nano /etc/postgresql/17/main/pg_hba.conf
+asvpg@vm-pg2:~$ sudo pg_ctlcluster 17 main reload
+
+asvpg@vm-pg3:~$ sudo nano /etc/postgresql/17/main/pg_hba.conf
+asvpg@vm-pg3:~$ sudo pg_ctlcluster 17 main reload
+
+--Теперь TL поменялись, ошибки ушли
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming |  4 |  0/240003F0 |   0 | 0/240003F0 |   0 |
+| vm-pg2 | 10.130.0.28 | Leader  | running   |  4 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  4 |  0/240003F0 |   0 | 0/240003F0 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+--делаем обратный switchover для проверки
+asvpg@vm-pg2:~$ sudo patronictl -c /etc/patroni/config.yml switchover
+Current cluster topology
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming |  4 |  0/240003F0 |   0 | 0/240003F0 |   0 |
+| vm-pg2 | 10.130.0.28 | Leader  | running   |  4 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  4 |  0/240003F0 |   0 | 0/240003F0 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+Primary [vm-pg2]:
+Candidate ['vm-pg1', 'vm-pg3'] []: vm-pg1
+When should the switchover take place (e.g. 2026-08-15T21:48 )  [now]:
+Are you sure you want to switchover cluster patroni, demoting current leader vm-pg2? [y/N]: y
+2026-08-15 20:48:09.38332 Successfully switched over to "vm-pg1"
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running |  4 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | stopped |    |     unknown |     |    unknown |     |
+| vm-pg3 | 10.130.0.33 | Replica | running |  4 |  0/24000538 |   0 | 0/24000538 |   0 |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg2:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  5 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming |  5 |  0/24000678 |   0 | 0/24000678 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  5 |  0/24000678 |   0 | 0/24000678 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg2:~$
+```
+
+####
+Управлять можно не только через утилиту patronictl, но и через REST API.
+По localhost в новых версиях Patroni не работает, только на внутреннем IP
+####
+```sh
+asvpg@vm-pg1:~$ curl -s http://localhost:8008/patroni | jq .
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$ curl -s http://10.130.0.13:8008/patroni | jq .
+{
+  "state": "running",
+  "postmaster_start_time": "2026-08-15 19:17:48.871339+00:00",
+  "role": "primary",
+  "server_version": 170011,
+  "xlog": {
+    "location": 603980136
+  },
+  "timeline": 3,
+  "replication": [
+    {
+      "usename": "repl_user",
+      "application_name": "vm-pg3",
+      "client_addr": "10.130.0.33",
+      "state": "streaming",
+      "sync_state": "async",
+      "sync_priority": 0
+    },
+    {
+      "usename": "repl_user",
+      "application_name": "vm-pg2",
+      "client_addr": "10.130.0.28",
+      "state": "streaming",
+      "sync_state": "async",
+      "sync_priority": 0
+    }
+  ],
+  "dcs_last_seen": 1786824828,
+  "database_system_identifier": "7673599298398442043",
+  "patroni": {
+    "version": "4.1.5",
+    "scope": "patroni",
+    "name": "vm-pg1"
+  }
+}
+asvpg@vm-pg1:~$
+```
+
+###
+4. Настройка pgbouncer
+###
