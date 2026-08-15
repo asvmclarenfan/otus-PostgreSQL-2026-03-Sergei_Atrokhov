@@ -2758,5 +2758,373 @@ asvpg@vm-pg1:~$
 ```
 
 ####
-Блокировка получена, БД стартовала, кластер настроен.
+Лидерство захвачено, БД стартовала, однако остались проблемы с подключением к БД через UNIX сокет:
 ####
+```sh
+postgres@vm-pg1:~$ patroni /etc/patroni/config.yml
+2026-08-15 18:27:28,165 INFO: Using default value thread_stack_size = 524288
+2026-08-15 18:27:28,175 INFO: Patroni global thread_pool_size = 5
+2026-08-15 18:27:28,328 INFO: Selected new etcd server http://10.129.0.23:2379
+2026-08-15 18:27:28,354 WARNING: I am the leader but not owner of the lease
+2026-08-15 18:27:28,355 CRITICAL: Can't start; there is already a node named 'vm-pg1' running
+postgres@vm-pg1:~$
+postgres@vm-pg1:~$ psql -h localhost
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+postgres=# exit
+postgres@vm-pg1:~$ psql
+psql: error: could not translate host name "." to address: No address associated with hostname
+postgres@vm-pg1:~$
+```
+
+####
+Добавляем запись для репликации в pg_hba
+####
+```sh
+asvpg@vm-pg1:~$ sudo nano /etc/postgresql/17/main/pg_hba.conf
+asvpg@vm-pg1:~$ cat /etc/postgresql/17/main/pg_hba.conf
+cat: /etc/postgresql/17/main/pg_hba.conf: Permission denied
+asvpg@vm-pg1:~$ sudo cat /etc/postgresql/17/main/pg_hba.conf
+# PostgreSQL Client Authentication Configuration File
+# ===================================================
+...
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             10.0.0.0/8            scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+host    replication     all             127.0.0.1/32            scram-sha-256
+asvpg@vm-pg1:~$
+```
+
+####
+Стартуем сервис Patroni и проверяем лог
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl start patroni
+asvpg@vm-pg1:~$ sudo bash
+root@vm-pg1:/home/asvpg# journalctl -u patroni.service -n 50 -f
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Maximum columns in an index: 32
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Maximum size of a TOAST chunk: 1996
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Size of a large-object chunk: 2048
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Date/time type storage: 64-bit integers
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Float8 argument passing: by value
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Data page checksum version: 0
+Aug 15 18:37:36 vm-pg1 patroni[6827]:   Mock authentication nonce: 64ff4c4c751a10f364360e73a19655d6dd41d667752e8e896f7f2c21a3a0f3da
+Aug 15 18:37:36 vm-pg1 patroni[6827]: 2026-08-15 18:37:36,673 INFO: Lock owner: None; I am vm-pg1
+Aug 15 18:37:36 vm-pg1 patroni[6827]: 2026-08-15 18:37:36,673 INFO: starting as a secondary
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.077 UTC [6855] LOG:  starting PostgreSQL 17.11 (Ubuntu 17.11-1.pgdg24.04+2) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.077 UTC [6855] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+Aug 15 18:37:37 vm-pg1 patroni[6827]: 2026-08-15 18:37:37,077 INFO: postmaster pid=6855
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.080 UTC [6855] LOG:  listening on IPv4 address "10.130.0.13", port 5432
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.085 UTC [6855] LOG:  listening on Unix socket "./.s.PGSQL.5432"
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.096 UTC [6860] LOG:  database system was shut down at 2026-08-15 18:34:10 UTC
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.096 UTC [6860] WARNING:  specified neither "primary_conninfo" nor "restore_command"
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.096 UTC [6860] HINT:  The database server will regularly poll the pg_wal subdirectory to check for files placed there.
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.096 UTC [6860] LOG:  entering standby mode
+Aug 15 18:37:37 vm-pg1 patroni[6861]: 2026-08-15 18:37:37.104 UTC [6861] postgres@postgres FATAL:  the database system is starting up
+Aug 15 18:37:37 vm-pg1 patroni[6856]: localhost:5432 - rejecting connections
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.106 UTC [6860] LOG:  consistent recovery state reached at 0/22000F10
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.106 UTC [6860] LOG:  invalid record length at 0/22000F10: expected at least 24, got 0
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.106 UTC [6860] LOG:  waiting for WAL to become available at 0/22000F28
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.107 UTC [6855] LOG:  database system is ready to accept read-only connections
+Aug 15 18:37:37 vm-pg1 patroni[6862]: localhost:5432 - accepting connections
+Aug 15 18:37:37 vm-pg1 patroni[6827]: 2026-08-15 18:37:37,127 INFO: establishing a new patroni heartbeat connection to postgres
+Aug 15 18:37:37 vm-pg1 patroni[6867]: 2026-08-15 18:37:37.317 UTC [6867] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:37 vm-pg1 patroni[6867]: 2026-08-15 18:37:37.317 UTC [6867] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:37 vm-pg1 patroni[6827]: 2026-08-15 18:37:37,352 INFO: promoted self to leader by acquiring session lock
+Aug 15 18:37:37 vm-pg1 patroni[6868]: server promoting
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.354 UTC [6860] LOG:  received promote request
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.354 UTC [6860] LOG:  redo is not required
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.366 UTC [6860] LOG:  selected new timeline ID: 3
+Aug 15 18:37:37 vm-pg1 patroni[6860]: 2026-08-15 18:37:37.486 UTC [6860] LOG:  archive recovery complete
+Aug 15 18:37:37 vm-pg1 patroni[6858]: 2026-08-15 18:37:37.528 UTC [6858] LOG:  checkpoint starting: force
+Aug 15 18:37:37 vm-pg1 patroni[6855]: 2026-08-15 18:37:37.534 UTC [6855] LOG:  database system is ready to accept connections
+Aug 15 18:37:37 vm-pg1 patroni[6858]: 2026-08-15 18:37:37.687 UTC [6858] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.009 s, sync=0.007 s, total=0.160 s; sync files=2, longest=0.006 s, average=0.004 s; distance=0 kB, estimate=0 kB; lsn=0/22000FA0, redo lsn=0/22000F48
+Aug 15 18:37:38 vm-pg1 patroni[6827]: 2026-08-15 18:37:38,582 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 18:37:42 vm-pg1 patroni[6888]: 2026-08-15 18:37:42.321 UTC [6888] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:42 vm-pg1 patroni[6888]: 2026-08-15 18:37:42.321 UTC [6888] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:42 vm-pg1 patroni[6892]: 2026-08-15 18:37:42.341 UTC [6892] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:42 vm-pg1 patroni[6892]: 2026-08-15 18:37:42.341 UTC [6892] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:47 vm-pg1 patroni[6894]: 2026-08-15 18:37:47.320 UTC [6894] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:47 vm-pg1 patroni[6894]: 2026-08-15 18:37:47.320 UTC [6894] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:48 vm-pg1 patroni[6827]: 2026-08-15 18:37:48,413 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 18:37:52 vm-pg1 patroni[6895]: 2026-08-15 18:37:52.322 UTC [6895] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:52 vm-pg1 patroni[6895]: 2026-08-15 18:37:52.322 UTC [6895] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:57 vm-pg1 patroni[6896]: 2026-08-15 18:37:57.326 UTC [6896] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:37:57 vm-pg1 patroni[6896]: 2026-08-15 18:37:57.326 UTC [6896] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:37:58 vm-pg1 patroni[6827]: 2026-08-15 18:37:58,524 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 18:38:02 vm-pg1 patroni[6898]: 2026-08-15 18:38:02.334 UTC [6898] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:38:02 vm-pg1 patroni[6898]: 2026-08-15 18:38:02.334 UTC [6898] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:38:07 vm-pg1 patroni[6899]: 2026-08-15 18:38:07.331 UTC [6899] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:38:07 vm-pg1 patroni[6899]: 2026-08-15 18:38:07.331 UTC [6899] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:38:08 vm-pg1 patroni[6827]: 2026-08-15 18:38:08,413 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 18:38:12 vm-pg1 patroni[6901]: 2026-08-15 18:38:12.338 UTC [6901] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:38:12 vm-pg1 patroni[6901]: 2026-08-15 18:38:12.338 UTC [6901] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:38:17 vm-pg1 patroni[6902]: 2026-08-15 18:38:17.337 UTC [6902] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:38:17 vm-pg1 patroni[6902]: 2026-08-15 18:38:17.337 UTC [6902] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+Aug 15 18:38:18 vm-pg1 patroni[6827]: 2026-08-15 18:38:18,413 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 18:38:22 vm-pg1 patroni[6903]: 2026-08-15 18:38:22.340 UTC [6903] repl_user@[unknown] ERROR:  requested WAL segment 000000010000000000000020 has already been removed
+Aug 15 18:38:22 vm-pg1 patroni[6903]: 2026-08-15 18:38:22.340 UTC [6903] repl_user@[unknown] STATEMENT:  START_REPLICATION 0/20000000 TIMELINE 1
+root@vm-pg1:/home/asvpg#
+```
+
+####
+Пока Patroni работает только на первой ноде. Перед тем как добавить в Patroni вторую и третью ноды необходимо создать пользователя rewind_user и добавить соответствующую строку в pg_hba
+####
+```sh
+asvpg@vm-pg1:~$ sudo bash
+root@vm-pg1:/home/asvpg# su - postgres
+postgres@vm-pg1:~$ psql
+psql: error: could not translate host name "." to address: No address associated with hostname
+postgres@vm-pg1:~$ psql -h localhost
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+postgres=# create user rewind_user with password 'rewind_user';
+CREATE ROLE
+postgres=#
+
+postgres@vm-pg1:~$ nano /etc/postgresql/17/main/pg_hba.conf
+postgres@vm-pg1:~$ cat /etc/postgresql/17/main/pg_hba.conf
+# PostgreSQL Client Authentication Configuration File
+# ===================================================
+#
+# Refer to the "Client Authentication" section in the PostgreSQL
+# documentation for a complete description of this file.  A short
+# synopsis follows.
+...
+# DO NOT DISABLE!
+# If you change this first entry you will need to make sure that the
+# database superuser can access the database using some other method.
+# Noninteractive access to all databases is required during automatic
+# maintenance (custom daily cronjobs, replication, and similar tasks).
+#
+# Database administrative login by Unix domain socket
+local   all             postgres                                peer
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            scram-sha-256
+# IPv6 local connections:
+host    all             all             ::1/128                 scram-sha-256
+host    all         rewind_user         10.0.0.0/8              scram-sha-256  --!!!
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             10.0.0.0/8              scram-sha-256
+host    replication     all             ::1/128                 scram-sha-256
+host    replication     all             127.0.0.1/32            scram-sha-256
+postgres@vm-pg1:~$
+postgres@vm-pg1:~$
+```
+
+####
+Были проблемы со второй нодой (не находил исторический WAL, видимо он был удален).
+Решил удалить вторую ноду из кластера Patroni и пересоздать его заново
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | running   |    |     unknown |     |    unknown |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/22002F18 |   0 | 0/22002F18 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo systemctl stop patroni
+asvpg@vm-pg2:~$ ps aux | grep postgres
+asvpg       8608  0.0  0.1   7080  2236 pts/0    S+   19:35   0:00 grep --color=auto postgres
+asvpg@vm-pg2:~$ sudo bash
+root@vm-pg2:/home/asvpg# su - postgres
+postgres@vm-pg2:~$ rm -rf /var/lib/postgresql/17/main/*
+postgres@vm-pg2:~$
+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml remove vm-pg2
++ Cluster: vm-pg2 (uninitialized) --+-------------+-----+------------+-----+
+| Member | Host | Role | State | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+------+------+-------+----+-------------+-----+------------+-----+
++--------+------+------+-------+----+-------------+-----+------------+-----+
+Please confirm the cluster name to remove: vm-pg2
+You are about to remove all information in DCS for vm-pg2, please type: "Yes I am aware": Yes I am aware
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/22002F18 |   0 | 0/22002F18 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+
+asvpg@vm-pg2:~$ sudo systemctl start patroni
+asvpg@vm-pg2:~$ sudo journalctl -f -u patroni.service
+Aug 15 19:38:53 vm-pg2 patroni[8648]: 2026-08-15 19:38:53,227 INFO: Selected new etcd server http://10.129.0.23:2379
+Aug 15 19:38:53 vm-pg2 patroni[8648]: 2026-08-15 19:38:53,260 INFO: No PostgreSQL configuration items changed, nothing to reload.
+Aug 15 19:38:53 vm-pg2 patroni[8648]: 2026-08-15 19:38:53,261 INFO: REST API thread_pool_size = 5
+Aug 15 19:38:53 vm-pg2 systemd[1]: Started patroni.service - Runners to orchestrate a high-availability PostgreSQL.
+Aug 15 19:38:53 vm-pg2 patroni[8648]: 2026-08-15 19:38:53,320 INFO: Lock owner: vm-pg1; I am vm-pg2
+Aug 15 19:38:53 vm-pg2 patroni[8648]: 2026-08-15 19:38:53,377 INFO: trying to bootstrap from leader 'vm-pg1'
+Aug 15 19:38:53 vm-pg2 patroni[8666]: WARNING:  skipping special file "./.s.PGSQL.5432"
+Aug 15 19:38:53 vm-pg2 patroni[8666]: WARNING:  skipping special file "./.s.PGSQL.5432"
+Aug 15 19:38:59 vm-pg2 patroni[8648]: 2026-08-15 19:38:59,014 INFO: Lock owner: vm-pg1; I am vm-pg2
+Aug 15 19:38:59 vm-pg2 patroni[8648]: 2026-08-15 19:38:59,130 INFO: bootstrap from leader 'vm-pg1' in progress
+Aug 15 19:39:09 vm-pg2 patroni[8648]: 2026-08-15 19:39:09,014 INFO: Lock owner: vm-pg1; I am vm-pg2
+Aug 15 19:39:09 vm-pg2 patroni[8648]: 2026-08-15 19:39:09,069 INFO: bootstrap from leader 'vm-pg1' in progress
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg2:~$ sudo journalctl -f -u patroni.service
+Aug 15 19:39:36 vm-pg2 patroni[8694]: 2026-08-15 19:39:36.239 UTC [8694] LOG:  consistent recovery state reached at 0/23000158
+Aug 15 19:39:36 vm-pg2 patroni[8689]: 2026-08-15 19:39:36.239 UTC [8689] LOG:  database system is ready to accept read-only connections
+Aug 15 19:39:36 vm-pg2 patroni[8698]: 2026-08-15 19:39:36.264 UTC [8698] LOG:  started streaming WAL from primary at 0/24000000 on timeline 3
+Aug 15 19:39:37 vm-pg2 patroni[8699]: localhost:5432 - accepting connections
+Aug 15 19:39:37 vm-pg2 patroni[8648]: 2026-08-15 19:39:37,254 INFO: Lock owner: vm-pg1; I am vm-pg2
+Aug 15 19:39:37 vm-pg2 patroni[8648]: 2026-08-15 19:39:37,254 INFO: establishing a new patroni heartbeat connection to postgres
+Aug 15 19:39:37 vm-pg2 patroni[8648]: 2026-08-15 19:39:37,443 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 15 19:39:39 vm-pg2 patroni[8648]: 2026-08-15 19:39:39,075 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 15 19:39:49 vm-pg2 patroni[8648]: 2026-08-15 19:39:49,573 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 15 19:39:59 vm-pg2 patroni[8648]: 2026-08-15 19:39:59,572 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 15 19:40:09 vm-pg2 patroni[8648]: 2026-08-15 19:40:09,573 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+
+asvpg@vm-pg3:~$ sudo journalctl -f -u patroni.service
+Aug 15 19:43:39 vm-pg3 patroni[4013]: 2026-08-15 19:43:39,572 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:43:49 vm-pg3 patroni[4013]: 2026-08-15 19:43:49,572 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:43:59 vm-pg3 patroni[4013]: 2026-08-15 19:43:59,126 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:43:59 vm-pg3 patroni[4043]: 2026-08-15 19:43:59.344 UTC [4043] LOG:  restartpoint starting: time
+Aug 15 19:43:59 vm-pg3 patroni[4043]: 2026-08-15 19:43:59.362 UTC [4043] LOG:  restartpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.019 s; sync files=0, longest=0.000 s, average=0.000 s; distance=16384 kB, estimate=16384 kB; lsn=0/240000B8, redo lsn=0/24000060
+Aug 15 19:43:59 vm-pg3 patroni[4043]: 2026-08-15 19:43:59.362 UTC [4043] LOG:  recovery restart point at 0/24000060
+Aug 15 19:44:09 vm-pg3 patroni[4013]: 2026-08-15 19:44:09,132 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:44:19 vm-pg3 patroni[4013]: 2026-08-15 19:44:19,572 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:44:29 vm-pg3 patroni[4013]: 2026-08-15 19:44:29,571 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+Aug 15 19:44:39 vm-pg3 patroni[4013]: 2026-08-15 19:44:39,571 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg1)
+
+asvpg@vm-pg1:~$ sudo journalctl -f -u patroni.service
+Aug 15 19:43:53 vm-pg1 patroni[8441]: 2026-08-15 19:43:53.649 UTC [8441] LOG:  checkpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.019 s; sync files=0, longest=0.000 s, average=0.000 s; distance=16384 kB, estimate=16384 kB; lsn=0/240000B8, redo lsn=0/24000060
+Aug 15 19:43:59 vm-pg1 patroni[6827]: 2026-08-15 19:43:59,069 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:09 vm-pg1 patroni[6827]: 2026-08-15 19:44:09,070 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:18 vm-pg1 patroni[6827]: 2026-08-15 19:44:18,958 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:29 vm-pg1 patroni[6827]: 2026-08-15 19:44:29,012 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:38 vm-pg1 patroni[6827]: 2026-08-15 19:44:38,958 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:48 vm-pg1 patroni[6827]: 2026-08-15 19:44:48,958 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:44:58 vm-pg1 patroni[6827]: 2026-08-15 19:44:58,959 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:45:08 vm-pg1 patroni[6827]: 2026-08-15 19:45:08,958 INFO: no action. I am (vm-pg1), the leader with the lock
+Aug 15 19:45:18 vm-pg1 patroni[6827]: 2026-08-15 19:45:18,958 INFO: no action. I am (vm-pg1), the leader with the lock
+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   |  3 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming |  3 |  0/24000060 |   0 | 0/24000060 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming |  3 |  0/24000060 |   0 | 0/24000060 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+```
+
+####
+Управлять Patroni можно с любом ноды, как такового мастера у него нет.
+Листенер пропишется автоматически (nano /etc/postgresql/17/main/postgresql.conf), т.е. Patroni заменил базовый файл конфигурации.
+Важно: в случае развертывания на существующем кластере необходимо поправить pg_hba на всех нодах кластера, иначе при swithcover/failover 
+к новым лидерам не получится подключиться!
+####
+
+####
+Для проверки корректности заполнения конфига Patroni (отступы итп) есть команда валидации
+####
+```sh
+asvpg@vm-pg2:~$ sudo patroni --validate-config /etc/patroni/config.yml
+postgresql.listen 127.0.0.1, 10.130.0.28:5432 didn't pass validation: [Errno -2] Name or service not known
+asvpg@vm-pg2:~$
+```
+
+####
+Есть возможность очистить конфиг DCS
+####
+```sh
+sudo -u postgres patroni /etc/patroni/config.yml --clean
+```
+
+####
+Есть возможность собрать с другим DCS
+####
+```sh
+sudo -u postgres patronictl -c /etc/patroni/config.yml remove patroni (patroni - имя в конфиге в параметре scope)
+```
+
+####
+Просмотр конфигурации Patroni
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml show-config
+loop_wait: 10
+maximum_lag_on_failover: 1048576
+postgresql:
+  use_pg_rewind: true
+retry_timeout: 10
+ttl: 30
+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo patronictl -c /etc/patroni/config.yml show-config
+loop_wait: 10
+maximum_lag_on_failover: 1048576
+postgresql:
+  use_pg_rewind: true
+retry_timeout: 10
+ttl: 30
+
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo patronictl -c /etc/patroni/config.yml show-config
+loop_wait: 10
+maximum_lag_on_failover: 1048576
+postgresql:
+  use_pg_rewind: true
+retry_timeout: 10
+ttl: 30
+
+asvpg@vm-pg3:~$
+```
+
+####
+Проверяем отсутствие зависших\неактивных слотов репликации
+####
+```sh
+asvpg@vm-pg1:~$ sudo -u postgres psql -h localhost -c "SELECT slot_name, slot_type, active, wal_status FROM pg_replication_slots;"
+Password for user postgres:
+ slot_name | slot_type | active | wal_status
+-----------+-----------+--------+------------
+ vm_pg3    | physical  | t      | reserved
+ vm_pg2    | physical  | t      | reserved
+(2 rows)
+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo -u postgres psql -h localhost -c "SELECT slot_name, slot_type, active, wal_status FROM pg_replication_slots;"
+Password for user postgres:
+ slot_name | slot_type | active | wal_status
+-----------+-----------+--------+------------
+ vm_pg3    | physical  | f      | reserved
+ vm_pg1    | physical  | f      | reserved
+(2 rows)
+
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo -u postgres psql -h localhost -c "SELECT slot_name, slot_type, active, wal_status FROM pg_replication_slots;"
+Password for user postgres:
+ slot_name | slot_type | active | wal_status
+-----------+-----------+--------+------------
+ vm_pg1    | physical  | f      | reserved
+ vm_pg2    | physical  | f      | reserved
+(2 rows)
+
+asvpg@vm-pg3:~$
+```
