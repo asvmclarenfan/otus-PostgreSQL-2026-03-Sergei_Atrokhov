@@ -3396,3 +3396,599 @@ asvpg@vm-pg1:~$
 ###
 4. Настройка pgbouncer
 ###
+
+####
+Устанавливается как сервис ОС на тех же серверах, где функционирует PostgreSQL. Является пулером соединений и обычно располагается между прикладными подами (например, Hikari) и СУБД.
+####
+```sh
+--подготовка к установке - обновляем локальные списки пакетов APT. Это необходимо, чтобы система знала о самых свежих версиях ПО в репозиториях Яндекса.
+asvpg@vm-pg2:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease [126 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease [126 kB]
+Hit:4 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+Get:5 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Packages [1191 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Components [180 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:11 http://mirror.yandex.ru/ubuntu noble-backports/main amd64 Components [5740 B]
+Get:12 http://mirror.yandex.ru/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+Get:13 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+Get:14 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.3 kB]
+Fetched 3963 kB in 1s (3871 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+1 package can be upgraded. Run 'apt list --upgradable' to see it.
+W: http://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+asvpg@vm-pg2:~$
+
+--на первой ноде есть проблема с подключением:
+asvpg@vm-pg1:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Hit:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease
+Hit:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease
+Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:5 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+Ign:5 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+Ign:5 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+Err:5 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+  Cannot initiate the connection to apt.postgresql.org:80 (2a04:4e42:6b::820). - connect (101: Network is unreachable) Could not connect to apt.postgresql.org:80 (151.101.247.52), connection timed out
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+6 packages can be upgraded. Run 'apt list --upgradable' to see them.
+W: Failed to fetch http://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/InRelease  Cannot initiate the connection to apt.postgresql.org:80 (2a04:4e42:6b::820). - connect (101: Network is unreachable) Could not connect to apt.postgresql.org:80 (151.101.247.52), connection timed out
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+asvpg@vm-pg1:~$
+
+--ранее, в рамках настройки PostgreSQL на второй ноде была аналогичная ошибка, выполняли принудительное использование IPv4 для менеджера пакетов
+asvpg@vm-pg1:~$ sudo cat /etc/apt/apt.conf.d/99force-ipv4
+cat: /etc/apt/apt.conf.d/99force-ipv4: No such file or directory
+asvpg@vm-pg1:~$ echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
+Acquire::ForceIPv4 "true";
+asvpg@vm-pg1:~$ sudo cat /etc/apt/apt.conf.d/99force-ipv4
+Acquire::ForceIPv4 "true";
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg3:~$ sudo cat /etc/apt/apt.conf.d/99force-ipv4
+cat: /etc/apt/apt.conf.d/99force-ipv4: No such file or directory
+asvpg@vm-pg3:~$ echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
+Acquire::ForceIPv4 "true";
+asvpg@vm-pg3:~$ sudo cat /etc/apt/apt.conf.d/99force-ipv4
+Acquire::ForceIPv4 "true";
+asvpg@vm-pg3:~$
+
+--настройки не помогли, выполнил рестарт ВМ в Яндекс Облаке, после этого всё получилось
+asvpg@vm-pg1:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Hit:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease
+Hit:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease
+Hit:4 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease
+Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+6 packages can be upgraded. Run 'apt list --upgradable' to see them.
+W: http://apt.postgresql.org/pub/repos/apt/dists/noble-pgdg/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+asvpg@vm-pg1:~$
+
+--устанавливаем последние обновления безопасности и библиотек для всех установленных пакетов
+asvpg@vm-pg1:~$ sudo apt upgrade -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+The following packages have been kept back:
+  google-compute-engine-oslogin
+The following packages will be upgraded:
+  krb5-locales libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0
+5 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+Need to get 622 kB of archives.
+After this operation, 0 B of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 krb5-locales all 1.20.1-6ubuntu2.8 [15.1 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libgssapi-krb5-2 amd64 1.20.1-6ubuntu2.8 [143 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5-3 amd64 1.20.1-6ubuntu2.8 [348 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5support0 amd64 1.20.1-6ubuntu2.8 [34.7 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libk5crypto3 amd64 1.20.1-6ubuntu2.8 [81.9 kB]
+Fetched 622 kB in 0s (27.0 MB/s)
+(Reading database ... 109305 files and directories currently installed.)
+Preparing to unpack .../krb5-locales_1.20.1-6ubuntu2.8_all.deb ...
+Unpacking krb5-locales (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libgssapi-krb5-2_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5-3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5-3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5support0_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5support0:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libk5crypto3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libk5crypto3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Setting up krb5-locales (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5support0:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libk5crypto3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5-3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart patroni.service ssh.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #2: sshd[1295]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg1:~$
+
+--для второй и третьей нод обновлений почему то не нашлось:
+asvpg@vm-pg2:~$ sudo apt upgrade -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+The following packages have been kept back:
+  google-compute-engine-oslogin
+0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo apt upgrade -y
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+The following packages have been kept back:
+  google-compute-engine-oslogin
+0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+asvpg@vm-pg3:~$
+
+--устанавливаем пулер pgbouncer
+asvpg@vm-pg1:~$ sudo apt install -y pgbouncer
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libcares2 libevent-2.1-7t64
+The following NEW packages will be installed:
+  libcares2 libevent-2.1-7t64 pgbouncer
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 453 kB of archives.
+After this operation, 1152 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 libcares2 amd64 1.27.0-1.0ubuntu1 [73.7 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 libevent-2.1-7t64 amd64 2.1.12-stable-9ubuntu2 [145 kB]
+Get:3 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1 [235 kB]
+Fetched 453 kB in 0s (2035 kB/s)
+Selecting previously unselected package libcares2:amd64.
+(Reading database ... 109305 files and directories currently installed.)
+Preparing to unpack .../libcares2_1.27.0-1.0ubuntu1_amd64.deb ...
+Unpacking libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Selecting previously unselected package libevent-2.1-7t64:amd64.
+Preparing to unpack .../libevent-2.1-7t64_2.1.12-stable-9ubuntu2_amd64.deb ...
+Unpacking libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Selecting previously unselected package pgbouncer.
+Preparing to unpack .../pgbouncer_1.25.2-1.pgdg24.04+1_amd64.deb ...
+Unpacking pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Setting up libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Setting up libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Setting up pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/pgbouncer.service → /usr/lib/systemd/system/pgbouncer.service.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #2: sshd[1295]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg1:~$
+
+--на второй ноде есть проблема с подключением к репозиторию
+asvpg@vm-pg2:~$ sudo apt install -y pgbouncer
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libcares2 libevent-2.1-7t64
+The following NEW packages will be installed:
+  libcares2 libevent-2.1-7t64 pgbouncer
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 235 kB/453 kB of archives.
+After this operation, 1152 kB of additional disk space will be used.
+Ign:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1
+Ign:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1
+Ign:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1
+Err:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1
+  Could not connect to apt.postgresql.org:80 (199.232.175.52), connection timed out
+E: Failed to fetch http://apt.postgresql.org/pub/repos/apt/pool/main/p/pgbouncer/pgbouncer_1.25.2-1.pgdg24.04%2b1_amd64.deb  Could not connect to apt.postgresql.org:80 (199.232.175.52), connection timed out
+E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
+asvpg@vm-pg2:~$
+
+--DNS работает (мы видим IP-адрес), но TCP-соединение по порту 80 обрывается с таймаутом.
+--Есть подозрения на нестабильную работу сетевой инфраструктуры Яндекс Облака.
+--Что то с одной из следующих настроек:
+Cloud NAT: Подсеть этой машины отвязалась от шлюза.
+Security Group (Egress): Правило разрешающее исходящий трафик слетело или имеет низкий приоритет.
+Cloud Router / Route Table: Пропал маршрут по умолчанию для подсети.
+--Выполнял detach\attach публичного IP-адреса - не помогло.
+--В итоге помог перезапуск службы DNA-резолвера.
+--Using degraded feature set UDP instead of UDP+EDNS0 for DNS server 10.130... - сообщение говорит о том, что служба разрешения имен видела сетевые ошибки при общении с внутренним DNS-сервером Яндекса. Из-за этого она перешла в «деградированный режим» и перестала корректно обрабатывать запросы от сложных приложений вроде APT, хотя базовый пинг мог проходить.
+
+Простой перезапуск службы (restart) сбросил кэш и заставил её заново договориться с облачным DNS-протоколом на нормальных скоростях.
+svpg@vm-pg2:~$ sudo systemctl status systemd-resolved.service
+● systemd-resolved.service - Network Name Resolution
+     Loaded: loaded (/usr/lib/systemd/system/systemd-resolved.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 08:02:11 UTC; 2min 32s ago
+       Docs: man:systemd-resolved.service(8)
+             man:org.freedesktop.resolve1(5)
+             https://www.freedesktop.org/wiki/Software/systemd/writing-network-configuration-managers
+             https://www.freedesktop.org/wiki/Software/systemd/writing-resolver-clients
+   Main PID: 442 (systemd-resolve)
+     Status: "Processing requests..."
+      Tasks: 1 (limit: 2313)
+     Memory: 7.5M (peak: 8.0M)
+        CPU: 73ms
+     CGroup: /system.slice/systemd-resolved.service
+             └─442 /usr/lib/systemd/systemd-resolved
+
+Aug 16 08:02:11 vm-pg2 systemd[1]: Starting systemd-resolved.service - Network Name Resolution...
+Aug 16 08:02:11 vm-pg2 systemd-resolved[442]: Positive Trust Anchors:
+Aug 16 08:02:11 vm-pg2 systemd-resolved[442]: . IN DS 20326 8 2 e06d44b80b8f1d39a95c0b0d7c65d08458e880409bbc68345710423>
+Aug 16 08:02:11 vm-pg2 systemd-resolved[442]: Negative trust anchors: home.arpa 10.in-addr.arpa 16.172.in-addr.arpa 17.>
+Aug 16 08:02:11 vm-pg2 systemd-resolved[442]: Using system hostname 'vm-pg2'.
+Aug 16 08:02:11 vm-pg2 systemd[1]: Started systemd-resolved.service - Network Name Resolution.
+Aug 16 08:02:16 vm-pg2 systemd-resolved[442]: Using degraded feature set UDP instead of UDP+EDNS0 for DNS server 10.130>
+Aug 16 08:02:22 vm-pg2 systemd-resolved[442]: Using degraded feature set UDP instead of UDP+EDNS0 for DNS server 10.130>
+Aug 16 08:02:59 vm-pg2 systemd-resolved[442]: Clock change detected. Flushing caches.
+
+asvpg@vm-pg2:~$ sudo systemctl restart systemd-resolved
+asvpg@vm-pg2:~$ sudo systemctl status systemd-resolved.service
+● systemd-resolved.service - Network Name Resolution
+     Loaded: loaded (/usr/lib/systemd/system/systemd-resolved.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 08:05:17 UTC; 3s ago
+       Docs: man:systemd-resolved.service(8)
+             man:org.freedesktop.resolve1(5)
+             https://www.freedesktop.org/wiki/Software/systemd/writing-network-configuration-managers
+             https://www.freedesktop.org/wiki/Software/systemd/writing-resolver-clients
+   Main PID: 1394 (systemd-resolve)
+     Status: "Processing requests..."
+      Tasks: 1 (limit: 2313)
+     Memory: 2.5M (peak: 2.5M)
+        CPU: 63ms
+     CGroup: /system.slice/systemd-resolved.service
+             └─1394 /usr/lib/systemd/systemd-resolved
+
+Aug 16 08:05:17 vm-pg2 systemd[1]: Starting systemd-resolved.service - Network Name Resolution...
+Aug 16 08:05:17 vm-pg2 systemd-resolved[1394]: Positive Trust Anchors:
+Aug 16 08:05:17 vm-pg2 systemd-resolved[1394]: . IN DS 20326 8 2 e06d44b80b8f1d39a95c0b0d7c65d08458e880409bbc6834571042>
+Aug 16 08:05:17 vm-pg2 systemd-resolved[1394]: Negative trust anchors: home.arpa 10.in-addr.arpa 16.172.in-addr.arpa 17>
+Aug 16 08:05:17 vm-pg2 systemd-resolved[1394]: Using system hostname 'vm-pg2'.
+Aug 16 08:05:17 vm-pg2 systemd[1]: Started systemd-resolved.service - Network Name Resolution.
+
+asvpg@vm-pg2:~$ sudo apt install -y pgbouncer
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libcares2 libevent-2.1-7t64
+The following NEW packages will be installed:
+  libcares2 libevent-2.1-7t64 pgbouncer
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 235 kB/453 kB of archives.
+After this operation, 1152 kB of additional disk space will be used.
+Get:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1 [235 kB]
+Fetched 235 kB in 0s (1383 kB/s)
+Selecting previously unselected package libcares2:amd64.
+(Reading database ... 109305 files and directories currently installed.)
+Preparing to unpack .../libcares2_1.27.0-1.0ubuntu1_amd64.deb ...
+Unpacking libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Selecting previously unselected package libevent-2.1-7t64:amd64.
+Preparing to unpack .../libevent-2.1-7t64_2.1.12-stable-9ubuntu2_amd64.deb ...
+Unpacking libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Selecting previously unselected package pgbouncer.
+Preparing to unpack .../pgbouncer_1.25.2-1.pgdg24.04+1_amd64.deb ...
+Unpacking pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Setting up libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Setting up libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Setting up pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/pgbouncer.service → /usr/lib/systemd/system/pgbouncer.service.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg2:~$
+
+
+asvpg@vm-pg3:~$ sudo apt install -y pgbouncer
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libcares2 libevent-2.1-7t64
+The following NEW packages will be installed:
+  libcares2 libevent-2.1-7t64 pgbouncer
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 453 kB of archives.
+After this operation, 1152 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 libcares2 amd64 1.27.0-1.0ubuntu1 [73.7 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble/main amd64 libevent-2.1-7t64 amd64 2.1.12-stable-9ubuntu2 [145 kB]
+Get:3 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 pgbouncer amd64 1.25.2-1.pgdg24.04+1 [235 kB]
+Fetched 453 kB in 0s (3658 kB/s)
+Selecting previously unselected package libcares2:amd64.
+(Reading database ... 109305 files and directories currently installed.)
+Preparing to unpack .../libcares2_1.27.0-1.0ubuntu1_amd64.deb ...
+Unpacking libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Selecting previously unselected package libevent-2.1-7t64:amd64.
+Preparing to unpack .../libevent-2.1-7t64_2.1.12-stable-9ubuntu2_amd64.deb ...
+Unpacking libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Selecting previously unselected package pgbouncer.
+Preparing to unpack .../pgbouncer_1.25.2-1.pgdg24.04+1_amd64.deb ...
+Unpacking pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Setting up libevent-2.1-7t64:amd64 (2.1.12-stable-9ubuntu2) ...
+Setting up libcares2:amd64 (1.27.0-1.0ubuntu1) ...
+Setting up pgbouncer (1.25.2-1.pgdg24.04+1) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/pgbouncer.service → /usr/lib/systemd/system/pgbouncer.service.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1255]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-pg3:~$
+```
+
+####
+Проверяем статус службы:
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 07:38:18 UTC; 31min ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 776 (pgbouncer)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+      Tasks: 3 (limit: 2313)
+     Memory: 5.9M (peak: 6.2M)
+        CPU: 240ms
+     CGroup: /system.slice/pgbouncer.service
+             └─776 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 08:00:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:01:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:02:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:03:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:04:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:05:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:06:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:07:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:08:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:09:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 08:05:33 UTC; 5min ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 1593 (pgbouncer)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+      Tasks: 3 (limit: 2313)
+     Memory: 1.8M (peak: 2.3M)
+        CPU: 43ms
+     CGroup: /system.slice/pgbouncer.service
+             └─1593 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 08:05:33 vm-pg2 pgbouncer[1593]: listening on [::1]:6432
+Aug 16 08:05:33 vm-pg2 pgbouncer[1593]: listening on 127.0.0.1:6432
+Aug 16 08:05:33 vm-pg2 pgbouncer[1593]: listening on unix:/var/run/postgresql/.s.PGSQL.6432
+Aug 16 08:05:33 vm-pg2 pgbouncer[1593]: process up: PgBouncer 1.25.2, libevent 2.1.12-stable (epoll), adns: c-ares 1.27>
+Aug 16 08:05:33 vm-pg2 systemd[1]: Started pgbouncer.service - connection pooler for PostgreSQL.
+Aug 16 08:06:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:07:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:08:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:09:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:10:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+
+asvpg@vm-pg2:~$
+
+
+asvpg@vm-pg3:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 07:38:17 UTC; 33min ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 778 (pgbouncer)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+      Tasks: 3 (limit: 2313)
+     Memory: 5.9M (peak: 6.1M)
+        CPU: 272ms
+     CGroup: /system.slice/pgbouncer.service
+             └─778 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 08:02:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:03:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:04:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:05:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:06:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:07:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:08:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:09:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:10:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:11:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+
+asvpg@vm-pg3:~$
+```
+
+####
+Настраиваем конфиги pgbouncer, предварительно останавливая сервис
+####
+```sh
+asvpg@vm-pg1:~$ sudo systemctl stop pgbouncer
+asvpg@vm-pg1:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:08 UTC; 1s ago
+   Duration: 34min 49.811s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 776 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 776 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+        CPU: 262ms
+
+Aug 16 08:08:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:09:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:10:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:11:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:12:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: server connections dropped, exiting
+Aug 16 08:13:08 vm-pg1 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+
+asvpg@vm-pg1:~$
+
+
+--
+postgres@vm-pg3:~$ cd /etc/pgbouncer/
+postgres@vm-pg3:/etc/pgbouncer$ ls -altr
+total 20
+-rw-r-----   1 postgres postgres     0 May  9 12:09 userlist.txt
+-rw-r-----   1 postgres postgres 11228 May  9 12:09 pgbouncer.ini
+drwxr-xr-x   2 root     root      4096 Aug 16 07:31 .
+drwxr-xr-x 110 root     root      4096 Aug 16 07:31 ..
+postgres@vm-pg3:/etc/pgbouncer$
+
+root@vm-pg3:/etc/pgbouncer# cat pgbouncer.ini
+[databases]
+thai = host=127.0.0.1 port=5432 dbname=thai
+[pgbouncer]
+logfile = /var/log/postgresql/pgbouncer.log
+pidfile = /var/run/postgresql/pgbouncer.pid
+listen_addr = 10.130.0.33
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+admin_users = admindb
+root@vm-pg3:/etc/pgbouncer#
+
+root@vm-pg1:/home/asvpg# cd /etc/pgbouncer/
+root@vm-pg1:/etc/pgbouncer# ls -altr
+total 20
+-rw-r-----   1 postgres postgres     0 May  9 12:09 userlist.txt
+-rw-r-----   1 postgres postgres 11228 May  9 12:09 pgbouncer.ini
+drwxr-xr-x   2 root     root      4096 Aug 16 07:31 .
+drwxr-xr-x 110 root     root      4096 Aug 16 07:31 ..
+root@vm-pg1:/etc/pgbouncer# cp pgbouncer.ini pgbouncer.ini.default
+root@vm-pg1:/etc/pgbouncer# rm pgbouncer.ini
+root@vm-pg1:/etc/pgbouncer# touch pgbouncer.ini
+root@vm-pg1:/etc/pgbouncer# chown postgres:postgres pgbouncer.ini
+root@vm-pg1:/etc/pgbouncer# chmod 640 pgbouncer.ini
+root@vm-pg1:/etc/pgbouncer# ls -altr
+total 20
+-rw-r-----   1 postgres postgres     0 May  9 12:09 userlist.txt
+drwxr-xr-x 110 root     root      4096 Aug 16 07:31 ..
+-rw-r-----   1 root     root     11228 Aug 16 08:39 pgbouncer.ini.default
+-rw-r-----   1 postgres postgres     0 Aug 16 08:39 pgbouncer.ini
+drwxr-xr-x   2 root     root      4096 Aug 16 08:39 .
+root@vm-pg1:/etc/pgbouncer#
+
+root@vm-pg1:/etc/pgbouncer# cat pgbouncer.ini
+[databases]
+thai = host=127.0.0.1 port=5432 dbname=thai
+[pgbouncer]
+logfile = /var/log/postgresql/pgbouncer.log
+pidfile = /var/run/postgresql/pgbouncer.pid
+listen_addr = 10.130.0.13
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+admin_users = admindb
+root@vm-pg1:/etc/pgbouncer#
+
+root@vm-pg2:/etc/pgbouncer# cat pgbouncer.ini
+[databases]
+thai = host=127.0.0.1 port=5432 dbname=thai
+[pgbouncer]
+logfile = /var/log/postgresql/pgbouncer.log
+pidfile = /var/run/postgresql/pgbouncer.pid
+listen_addr = 10.130.0.28
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+admin_users = admindb
+root@vm-pg2:/etc/pgbouncer#
+
+--создаем пользователя admindb - будет администратором pgbouncer
+asvpg@vm-pg3:~$ sudo -u postgres psql -h localhost
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+postgres=# create user admindb with password 'admindb';
+CREATE ROLE
+postgres=#
+
+--просмотрим соль\хеш созданных пользователей
+postgres=# select usename,passwd from pg_shadow;
+   usename   |                                                                passwd                                                             
+-------------+--------------------------------------------------------------------------------------------------------------------------------------
+ repl_user   | SCRAM-SHA-256$4096:DvCV1uQ8ot382XA0v/pwKA==$ynl+tF9ICJBNMlChe9OuhTv7gDjJudazcbOAkLn0zXc=:sNera5KzYSH4MeXxh77TOPVAiKfEyS/47oHPHI905h4=
+ postgres    | SCRAM-SHA-256$4096:lw/7mLaZFdn0cSzYo2cNmQ==$FiW/u1WDfn4BzAMMNKezNkuRewIGLKwxssoDDKlXlAo=:ayX5tzUNWHZdyTSmyX3/zV1/VEi+j97e1KapH5KoVic=
+ rewind_user | SCRAM-SHA-256$4096:2q526mRy39kyGJexXLpefg==$IdxNiSd0yp7dMelhNxgxWyFrgyVG9BmXtwwyDEp7E7w=:xSmAM8d/qZIOKB4/vfOvYNca+hnUwm51hL/kv1xQ9gY=
+ admindb     | SCRAM-SHA-256$4096:UOxKB4r22j9WGjS+p/uCpQ==$awO0lcLCDGxUn9JX1TIqPJbLZ3pvIfk+Y3uxm8ruZ+s=:bIhKT3V99UHDxpkKaTH+ByfWpTZE5qkNMxYhv52bB3A=
+(4 rows)
+
+--на каждой из 3 нод в файл userlist.txt укажем хеш для 2 пользователей- admindb, postgres
+root@vm-pg3:/etc/pgbouncer# nano userlist.txt
+root@vm-pg3:/etc/pgbouncer# cat userlist.txt
+"admindb" "SCRAM-SHA-256$4096:UOxKB4r22j9WGjS+p/uCpQ==$awO0lcLCDGxUn9JX1TIqPJbLZ3pvIfk+Y3uxm8ruZ+s=:bIhKT3V99UHDxpkKaTH+ByfWpTZE5qkNMxYhv52bB3A="
+"postgres" "SCRAM-SHA-256$4096:lw/7mLaZFdn0cSzYo2cNmQ==$FiW/u1WDfn4BzAMMNKezNkuRewIGLKwxssoDDKlXlAo=:ayX5tzUNWHZdyTSmyX3/zV1/VEi+j97e1KapH5KoVic="
+root@vm-pg3:/etc/pgbouncer#
+
+```
+
+####
+Запускать pgbouncer можно в качестве сервиса или в качестве демона. Второе не рекомендуется из-за сложности управления, поэтому выбираем управление через сервис.
+####
