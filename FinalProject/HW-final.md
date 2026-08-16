@@ -5511,6 +5511,1006 @@ thai=#
 ###
 
 ####
+keepalived - единая точка входа. Держать белый IP адрес, на который ходят клиенты. Если первая ВМ умирает, то с этим же IP адресом начинает работать вторая ВМ. Т.е. есть один IP адрес для всех, а второй для VRRP протокола.
+keepalived не работает в Google облаке, но в Яндексе работает.
+
+Установим сервис
 ####
 ```sh
+asvpg@vm-haproxy1:~$ sudo apt install -y keepalived
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  ipvsadm libsnmp-base libsnmp40t64
+Suggested packages:
+  heartbeat ldirectord snmp-mibs-downloader
+The following NEW packages will be installed:
+  ipvsadm keepalived libsnmp-base libsnmp40t64
+0 upgraded, 4 newly installed, 0 to remove and 1 not upgraded.
+Need to get 1773 kB of archives.
+After this operation, 5941 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsnmp-base all 5.9.4+dfsg-1.1ubuntu3.2 [206 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsnmp40t64 amd64 5.9.4+dfsg-1.1ubuntu3.2 [1066 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 keepalived amd64 1:2.2.8-1build2 [460 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 ipvsadm amd64 1:1.31-1ubuntu0.1 [40.3 kB]
+Fetched 1773 kB in 0s (20.3 MB/s)
+Selecting previously unselected package libsnmp-base.
+(Reading database ... 107027 files and directories currently installed.)
+Preparing to unpack .../libsnmp-base_5.9.4+dfsg-1.1ubuntu3.2_all.deb ...
+Unpacking libsnmp-base (5.9.4+dfsg-1.1ubuntu3.2) ...
+Selecting previously unselected package libsnmp40t64:amd64.
+Preparing to unpack .../libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb ...
+Unpacking libsnmp40t64:amd64 (5.9.4+dfsg-1.1ubuntu3.2) ...
+Selecting previously unselected package keepalived.
+Preparing to unpack .../keepalived_1%3a2.2.8-1build2_amd64.deb ...
+Unpacking keepalived (1:2.2.8-1build2) ...
+Selecting previously unselected package ipvsadm.
+Preparing to unpack .../ipvsadm_1%3a1.31-1ubuntu0.1_amd64.deb ...
+Unpacking ipvsadm (1:1.31-1ubuntu0.1) ...
+Setting up ipvsadm (1:1.31-1ubuntu0.1) ...
+Setting up libsnmp-base (5.9.4+dfsg-1.1ubuntu3.2) ...
+Setting up libsnmp40t64:amd64 (5.9.4+dfsg-1.1ubuntu3.2) ...
+Setting up keepalived (1:2.2.8-1build2) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/keepalived.service → /usr/lib/systemd/system/keepalived.service.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1078]
+ asvpg @ user manager service: systemd[1088]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo apt install -y keepalived
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  ipvsadm libsnmp-base libsnmp40t64
+Suggested packages:
+  heartbeat ldirectord snmp-mibs-downloader
+The following NEW packages will be installed:
+  ipvsadm keepalived libsnmp-base libsnmp40t64
+0 upgraded, 4 newly installed, 0 to remove and 1 not upgraded.
+Need to get 1773 kB of archives.
+After this operation, 5941 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsnmp-base all 5.9.4+dfsg-1.1ubuntu3.2 [206 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsnmp40t64 amd64 5.9.4+dfsg-1.1ubuntu3.2 [1066 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble/main amd64 keepalived amd64 1:2.2.8-1build2 [460 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 ipvsadm amd64 1:1.31-1ubuntu0.1 [40.3 kB]
+Fetched 1773 kB in 0s (15.8 MB/s)
+Selecting previously unselected package libsnmp-base.
+(Reading database ... 107027 files and directories currently installed.)
+Preparing to unpack .../libsnmp-base_5.9.4+dfsg-1.1ubuntu3.2_all.deb ...
+Unpacking libsnmp-base (5.9.4+dfsg-1.1ubuntu3.2) ...
+Selecting previously unselected package libsnmp40t64:amd64.
+Preparing to unpack .../libsnmp40t64_5.9.4+dfsg-1.1ubuntu3.2_amd64.deb ...
+Unpacking libsnmp40t64:amd64 (5.9.4+dfsg-1.1ubuntu3.2) ...
+Selecting previously unselected package keepalived.
+Preparing to unpack .../keepalived_1%3a2.2.8-1build2_amd64.deb ...
+Unpacking keepalived (1:2.2.8-1build2) ...
+Selecting previously unselected package ipvsadm.
+Preparing to unpack .../ipvsadm_1%3a1.31-1ubuntu0.1_amd64.deb ...
+Unpacking ipvsadm (1:1.31-1ubuntu0.1) ...
+Setting up ipvsadm (1:1.31-1ubuntu0.1) ...
+Setting up libsnmp-base (5.9.4+dfsg-1.1ubuntu3.2) ...
+Setting up libsnmp40t64:amd64 (5.9.4+dfsg-1.1ubuntu3.2) ...
+Setting up keepalived (1:2.2.8-1build2) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/keepalived.service → /usr/lib/systemd/system/keepalived.service.
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1070]
+ asvpg @ user manager service: systemd[1080]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy2:~$
+```
+
+####
+В настройках необходимо задать приоритет ноде, чем выше приоритет, тем раньше нода поднимает белый IP адрес.
+####
+```sh
+--сначала необходимо настроить ядро Linux, по умолчанию оно запрещает программе занимать IP-адрес, который ей не принадлежит физически. Эта опция разрешает HAProxy слушать Virtual IP (VIP), пока тот еще "припаркован" у соседа или находится в пути.
+asvpg@vm-haproxy1:~$ sudo sysctl -p
+net.ipv4.ip_nonlocal_bind = 1
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo nano /etc/sysctl.conf
+asvpg@vm-haproxy2:~$ sudo sysctl -p
+net.ipv4.ip_nonlocal_bind = 1
+asvpg@vm-haproxy2:~$
+
+--далее настраиваем локальные конфиги на 2 нодах через /etc/keepalived/keepalived.conf
+--мастер нода
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    script "killall -0 haproxy" # Проверка наличия процесса
+    interval 2                  # Каждые 2 секунды
+    weight 2                    # Если ок, прибавим +2 к приоритету
+    fall 2                      # Считать упавшим после 2 неудачных проверок
+    rise 2                      # Считать поднявшимся после 2 успешных
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 101                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass SuperSecretPasswordHere
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+asvpg@vm-haproxy1:~$
+
+--бэкап нода
+asvpg@vm-haproxy2:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy2:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_02 # Уникальное имя
+}
+
+vrrp_script check_haproxy {
+    script "killall -0 haproxy"
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state BACKUP               # Роль ведомого
+    interface eth0             # Тот же интерфейс
+    virtual_router_id 51       # Тот же ID группы!
+    priority 100               # Приоритет ниже мастера
+
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass SuperSecretPasswordHere # Пароль должен совпадать с мастером
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+asvpg@vm-haproxy2:~$
+```
+
+####
+Описание используемых опций\атрибутов
+####
+```sh
+router_id	- текстовая метка для удобства чтения системных логов (journalctl -u keepalived).
+vrrp_script	- блок здоровья. Keepalived запускает команду каждые interval секунд. Если команда завершилась успешно (код 0), скрипт считается пройденным.
+state - (MASTER/BACKUP),	желаемое состояние. Важно: машина со статусом MASTER не обязательно станет главной сразу. Решающим фактором является Priority.
+priority (приоритет) - самый главный параметр. Узел с наибольшим числом становится Master. Если Мастер падает, VIP переходит к узлу со следующим по величине приоритетом. 101 (Master) > 100 (Backup). Разрыв в единицу безопасен, так как позволяет использовать параметр weight в скрипте.
+virtual_router_id (VRID) -	идентификатор группы от 0 до 255. Ноды с разными VRID не будут видеть друг друга. Должен быть уникальным внутри одной локальной сети (подсети), чтобы не конфликтовать с другими кластерами.
+advert_int	- как часто Master уведомляет: «Я тут! Я держу IP!». Стандарт — 1 секунда.
+authentication -	защита от того, чтобы чужой сервер в той же подсети случайно не перехватил трафик. Тип PASS небезопасен против хакеров, но защищает от ошибок администратора. Пароли должны быть одинаковыми.
+virtual_ipaddress	- список адресов, которые перекидываются между машинами. Параметр label помогает визуально отличить его в выводе команды ip a.
+track_script	- инструкция следить за блоком check_haproxy. Если HAProxy упал, вес приоритета уменьшается на значение weight (на 2). Так как разрыв между серверами всего 1 балл (101 − 100 = 1), падение HAProxy автоматически сделает текущего лидера проигравшим, и VIP уйдет ко второму узлу.
+```
+
+####
+Выполняем старт и проверку
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo systemctl enable keepalived
+Synchronizing state of keepalived.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable keepalived
+asvpg@vm-haproxy1:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: There are 1 missing '}'s or extra '{'s
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: WARNING - script `killall` resolved by path search to `/usr/bin/killall`. Please specify full path.
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:28:20 haproxynode Keepalived[8788]: Startup complete
+Aug 16 11:28:20 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: VRRP_Script(check_haproxy) succeeded
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (VI_01) Changing effective priority from 101 to 103
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8789]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: There are 1 missing '}'s or extra '{'s
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: WARNING - script `killall` resolved by path search to `/usr/bin/killall`. Please specify full path.
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:28:20 haproxynode Keepalived[8788]: Startup complete
+Aug 16 11:28:20 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: VRRP_Script(check_haproxy) succeeded
+Aug 16 11:28:20 haproxynode Keepalived_vrrp[8789]: (VI_01) Changing effective priority from 101 to 103
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8789]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+
+asvpg@vm-haproxy2:~$ sudo systemctl enable keepalived
+Synchronizing state of keepalived.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable keepalived
+asvpg@vm-haproxy2:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: Script user 'keepalived_script' does not exist
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: WARNING - script `killall` resolved by path search to `/usr/bin/killall`. Please specify full path.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:28:24 haproxynode Keepalived[8396]: Startup complete
+Aug 16 11:28:24 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: VRRP_Script(check_haproxy) succeeded
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Changing effective priority from 100 to 102
+Aug 16 11:28:27 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: Script user 'keepalived_script' does not exist
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: WARNING - script `killall` resolved by path search to `/usr/bin/killall`. Please specify full path.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:28:24 haproxynode Keepalived[8396]: Startup complete
+Aug 16 11:28:24 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: VRRP_Script(check_haproxy) succeeded
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Changing effective priority from 100 to 102
+Aug 16 11:28:27 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: Script user 'keepalived_script' does not exist
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: WARNING - script `killall` resolved by path search to `/usr/bin/killall`. Please specify full path.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:28:24 haproxynode Keepalived[8396]: Startup complete
+Aug 16 11:28:24 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: VRRP_Script(check_haproxy) succeeded
+Aug 16 11:28:24 haproxynode Keepalived_vrrp[8397]: (VI_01) Changing effective priority from 100 to 102
+Aug 16 11:28:27 haproxynode Keepalived_vrrp[8397]: (VI_01) Entering MASTER STATE
+
+asvpg@vm-haproxy2:~$
+```
+
+####
+Есть критические ошибки. Обе ноды стали MASTER (split brain!). 
+Видимо разница приоритетов (101 и 100) слишком мала для облака с возможными задержками сети. Пакет объявления от второй ноды пришел чуть позже, но её веса хватило, чтобы она тоже посчитала себя главной. Сейчас обе машины отвечают по IP 10.164.0.14.
+Процесс keepalived пытается запустить скрипт killall от пользователя keepalived_script, которого не существует, так как сам процесс работает от root. Это небезопасно и может привести к падению проверки при обновлении системы.
+
+Далее исправляем выявленные ошибки
+####
+```sh
+--создание системного пользователя для скриптов
+asvpg@vm-haproxy1:~$ sudo adduser --system --no-create-home --group --home /nonexistent keepalived_script
+info: The home dir /nonexistent you specified can't be accessed: No such file or directory
+
+info: Selecting UID from range 100 to 999 ...
+
+info: Selecting GID from range 100 to 999 ...
+info: Adding system user `keepalived_script' (UID 111) ...
+info: Adding new group `keepalived_script' (GID 114) ...
+info: Adding new user `keepalived_script' (UID 111) with group `keepalived_script' ...
+info: Not creating `/nonexistent'.
+asvpg@vm-haproxy1:~$ id keepalived_script
+uid=111(keepalived_script) gid=114(keepalived_script) groups=114(keepalived_script)
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo adduser --system --no-create-home --group --home /nonexistent keepalived_script
+info: The home dir /nonexistent you specified can't be accessed: No such file or directory
+
+info: Selecting UID from range 100 to 999 ...
+
+info: Selecting GID from range 100 to 999 ...
+info: Adding system user `keepalived_script' (UID 111) ...
+info: Adding new group `keepalived_script' (GID 114) ...
+info: Adding new user `keepalived_script' (UID 111) with group `keepalived_script' ...
+info: Not creating `/nonexistent'.
+asvpg@vm-haproxy2:~$ id keepalived_script
+uid=111(keepalived_script) gid=114(keepalived_script) groups=114(keepalived_script)
+asvpg@vm-haproxy2:~$
+
+--добавляем в конфиг блок с безопасностью для созданного пользователя и добавляем закрывающую скобку
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    script "killall -0 haproxy" # Проверка наличия процесса
+    interval 2                  # Каждые 2 секунды
+    weight 2                    # Если ок, прибавим +2 к приоритету
+    fall 2                      # Считать упавшим после 2 неудачных проверок
+    rise 2                      # Считать поднявшимся после 2 успешных
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 101                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass SuperSecretPasswordHere
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+(/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Disabling track script check_haproxy since not found/accessible
+asvpg@vm-haproxy1:~$
+
+--уменьшаем пароль до 8 символов (ограничения старой версии)
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    script "killall -0 haproxy" # Проверка наличия процесса
+    interval 2                  # Каждые 2 секунды
+    weight 2                    # Если ок, прибавим +2 к приоритету
+    fall 2                      # Считать упавшим после 2 неудачных проверок
+    rise 2                      # Считать поднявшимся после 2 успешных
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 101                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass PASS1
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+Disabling track script check_haproxy since not found/accessible
+asvpg@vm-haproxy1:~$
+
+--указываем полный путь для killall
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    script "/usr/bin/killall -0 haproxy" # Проверка наличия процесса
+    interval 2                  # Каждые 2 секунды
+    weight 2                    # Если ок, прибавим +2 к приоритету
+    fall 2                      # Считать упавшим после 2 неудачных проверок
+    rise 2                      # Считать поднявшимся после 2 успешных
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 101                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass PASS1
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy2:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_02 # Уникальное имя
+}
+
+vrrp_script check_haproxy {
+    script "/usr/bin/killall -0 haproxy"
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state BACKUP               # Роль ведомого
+    interface eth0             # Тот же интерфейс
+    virtual_router_id 51       # Тот же ID группы!
+    priority 100               # Приоритет ниже мастера
+
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass PASS1 # Пароль должен совпадать с мастером
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+asvpg@vm-haproxy2:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+asvpg@vm-haproxy2:~$
+```
+
+####
+Запускаем и проверяем
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo systemctl enable keepalived
+Synchronizing state of keepalived.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable keepalived
+asvpg@vm-haproxy1:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: (/etc/keepalived/keepalived.conf: Line 33) Unexpected '{' - ignoring
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: (/etc/keepalived/keepalived.conf: Line 34) Unknown keyword 'script_user'
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: (/etc/keepalived/keepalived.conf: Line 36) Unknown keyword '}'
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: Unable to set supplementary gids (Operation not permitted)
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: Permissions failure for script killall in path - disabling
+Aug 16 11:47:02 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: Disabling track script check_haproxy since not found/accessible
+Aug 16 11:47:02 haproxynode Keepalived_vrrp[10096]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:47:02 haproxynode Keepalived[10095]: Startup complete
+Aug 16 11:47:05 haproxynode Keepalived_vrrp[10096]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo systemctl enable keepalived
+Synchronizing state of keepalived.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable keepalived
+asvpg@vm-haproxy2:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 11:47:07 haproxynode Keepalived[9698]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 11:47:07 haproxynode Keepalived[9698]: Starting VRRP child process, pid=9699
+Aug 16 11:47:07 haproxynode Keepalived_vrrp[9699]: (/etc/keepalived/keepalived.conf: Line 22) Truncating auth_pass to 8 characters
+Aug 16 11:47:07 haproxynode Keepalived_vrrp[9699]: Unable to set supplementary gids (Operation not permitted)
+Aug 16 11:47:07 haproxynode Keepalived_vrrp[9699]: Permissions failure for script killall in path - disabling
+Aug 16 11:47:07 haproxynode Keepalived_vrrp[9699]: Disabling track script check_haproxy since not found/accessible
+Aug 16 11:47:07 haproxynode Keepalived_vrrp[9699]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 11:47:07 haproxynode Keepalived[9698]: Startup complete
+Aug 16 11:47:07 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 11:47:10 haproxynode Keepalived_vrrp[9699]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+```
+
+####
+Снова Split Brain, увеличим разницы в приоритете с 1 до 5
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo systemctl stop keepalived
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    script "/usr/bin/killall -0 haproxy" # Проверка наличия процесса
+    interval 2                  # Каждые 2 секунды
+    weight 2                    # Если ок, прибавим +2 к приоритету
+    fall 2                      # Считать упавшим после 2 неудачных проверок
+    rise 2                      # Считать поднявшимся после 2 успешных
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 105                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass PASS1
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy1:~$ sudo systemctl edit keepalived
+--добавим следующий параметр в настройки ядра через службу systemd для исправления ошибки permission failure
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/keepalived --dont-fork --log-console --release-vips
+
+
+asvpg@vm-haproxy1:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy1:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:06:39 haproxynode Keepalived[10495]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:06:39 haproxynode Keepalived[10495]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:06:39 haproxynode Keepalived[10495]: Starting VRRP child process, pid=10496
+Aug 16 12:06:39 haproxynode Keepalived_vrrp[10496]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:06:39 haproxynode Keepalived[10495]: Startup complete
+Aug 16 12:06:39 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:06:39 haproxynode Keepalived_vrrp[10496]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:06:39 haproxynode Keepalived_vrrp[10496]: Script `check_haproxy` now returning 1
+Aug 16 12:06:39 haproxynode Keepalived_vrrp[10496]: VRRP_Script(check_haproxy) failed (exited with status 1)
+Aug 16 12:06:42 haproxynode Keepalived_vrrp[10496]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy2:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:06:42 haproxynode Keepalived[10070]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:06:42 haproxynode Keepalived[10070]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:06:42 haproxynode Keepalived[10070]: Starting VRRP child process, pid=10071
+Aug 16 12:06:42 haproxynode Keepalived_vrrp[10071]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:06:42 haproxynode Keepalived_vrrp[10071]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:06:42 haproxynode Keepalived[10070]: Startup complete
+Aug 16 12:06:42 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:06:42 haproxynode Keepalived_vrrp[10071]: Script `check_haproxy` now returning 1
+Aug 16 12:06:42 haproxynode Keepalived_vrrp[10071]: VRRP_Script(check_haproxy) failed (exited with status 1)
+Aug 16 12:06:46 haproxynode Keepalived_vrrp[10071]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+
+asvpg@vm-haproxy1:~$ ps aux | grep [h]aproxy
+root        7752  0.0  0.6  96880 13296 ?        Ss   10:26   0:00 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+root        7756  0.0  2.0 151712 40436 ?        Sl   10:26   0:01 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+asvpg@vm-haproxy1:~$
+
+--Команда killall -0 haproxy не срабатывает, потому что:
+Бинарник лежит в папке /usr/sbin/. Процесс keepalived) может просто не видеть эту директорию при поиске по короткому имени.
+Запущено два процесса (7752 — родительский мастер-процесс для проверки конфигурации, и 7756 — рабочий дочерний). Команда killall -0 отправляет сигнал "ноль" всем найденным процессам. Если хотя бы один из них принадлежит другому пользователю или имеет другие права доступа, команда может вернуть код ошибки 1.
+
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    # Проверяем наличие файла и существование процесса по его ID внутри
+    script "[ -f /run/haproxy.pid ] && kill -0 $(cat /run/haproxy.pid)"
+
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 105                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass PASS1
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+Disabling track script check_haproxy since not found/accessible
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ ps aux | grep [h]aproxy
+root        7747  0.0  0.6  96880 13364 ?        Ss   10:26   0:00 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+root        7751  0.0  2.0 151712 40452 ?        Sl   10:26   0:01 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+asvpg@vm-haproxy2:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy2:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_02 # Уникальное имя
+}
+
+vrrp_script check_haproxy {
+    # Проверяем наличие файла и существование процесса по его ID внутри
+    script "[ -f /run/haproxy.pid ] && kill -0 $(cat /run/haproxy.pid)"
+
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state BACKUP               # Роль ведомого
+    interface eth0             # Тот же интерфейс
+    virtual_router_id 51       # Тот же ID группы!
+    priority 100               # Приоритет ниже мастера
+
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass PASS1 # Пароль должен совпадать с мастером
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+asvpg@vm-haproxy2:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+Disabling track script check_haproxy since not found/accessible
+asvpg@vm-haproxy2:~$
+
+asvpg@vm-haproxy1:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy1:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:18:13 haproxynode Keepalived[10954]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:18:13 haproxynode Keepalived[10954]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:18:13 haproxynode Keepalived[10954]: Starting VRRP child process, pid=10957
+Aug 16 12:18:13 haproxynode Keepalived_vrrp[10957]: Unable to set supplementary gids (Operation not permitted)
+Aug 16 12:18:13 haproxynode Keepalived_vrrp[10957]: Permissions failure for script [ in path - disabling
+Aug 16 12:18:13 haproxynode Keepalived_vrrp[10957]: Disabling track script check_haproxy since not found/accessible
+Aug 16 12:18:13 haproxynode Keepalived_vrrp[10957]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:18:13 haproxynode Keepalived[10954]: Startup complete
+Aug 16 12:18:13 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:18:17 haproxynode Keepalived_vrrp[10957]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy2:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:18:17 haproxynode Keepalived[10533]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:18:17 haproxynode Keepalived[10533]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:18:17 haproxynode Keepalived[10533]: Starting VRRP child process, pid=10534
+Aug 16 12:18:17 haproxynode Keepalived_vrrp[10534]: Unable to set supplementary gids (Operation not permitted)
+Aug 16 12:18:17 haproxynode Keepalived_vrrp[10534]: Permissions failure for script [ in path - disabling
+Aug 16 12:18:17 haproxynode Keepalived_vrrp[10534]: Disabling track script check_haproxy since not found/accessible
+Aug 16 12:18:17 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:18:17 haproxynode Keepalived_vrrp[10534]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:18:17 haproxynode Keepalived[10533]: Startup complete
+Aug 16 12:18:21 haproxynode Keepalived_vrrp[10534]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+
+
+
+asvpg@vm-haproxy1:~$ keepalived --version
+Keepalived v2.2.8 (04/04,2023), git commit v2.2.7-154-g292b299e+
+
+Copyright(C) 2001-2023 Alexandre Cassen, <acassen@gmail.com>
+
+Built with kernel headers for Linux 6.8.0
+Running on Linux 6.8.0-137-generic #137-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 17 20:28:23 UTC 2026
+Distro: Ubuntu 24.04.4 LTS
+
+configure options: --build=x86_64-linux-gnu --prefix=/usr --includedir=${prefix}/include --mandir=${prefix}/share/man --infodir=${prefix}/share/info --sysconfdir=/etc --localstatedir=/var --disable-option-checking --disable-silent-rules --libdir=${prefix}/lib/x86_64-linux-gnu --runstatedir=/run --disable-maintainer-mode --disable-dependency-tracking --enable-snmp --enable-sha1 --enable-snmp-rfcv2 --enable-snmp-rfcv3 --enable-dbus --enable-json --enable-bfd --enable-regex --with-init=systemd build_alias=x86_64-linux-gnu CFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer  -flto=auto -ffat-lto-objects -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/keepalived-F53vvG/keepalived-2.2.8=/usr/src/keepalived-1:2.2.8-1build2 LDFLAGS=-Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=3
+
+Config options:  NFTABLES LVS REGEX VRRP VRRP_AUTH VRRP_VMAC JSON BFD OLD_CHKSUM_COMPAT SNMP_V3_FOR_V2 SNMP_VRRP SNMP_CHECKER SNMP_RFCV2 SNMP_RFCV3 DBUS INIT=systemd SYSTEMD_NOTIFY
+
+System options:  VSYSLOG MEMFD_CREATE IPV6_MULTICAST_ALL IPV4_DEVCONF LIBNL3 RTA_ENCAP RTA_EXPIRES RTA_NEWDST RTA_PREF FRA_SUPPRESS_PREFIXLEN FRA_SUPPRESS_IFGROUP FRA_TUN_ID RTAX_CC_ALGO RTAX_QUICKACK RTEXT_FILTER_SKIP_STATS FRA_L3MDEV FRA_UID_RANGE RTAX_FASTOPEN_NO_COOKIE RTA_VIA FRA_PROTOCOL FRA_IP_PROTO FRA_SPORT_RANGE FRA_DPORT_RANGE RTA_TTL_PROPAGATE IFA_FLAGS LWTUNNEL_ENCAP_MPLS LWTUNNEL_ENCAP_ILA NET_LINUX_IF_H_COLLISION LIBIPVS_NETLINK IPVS_DEST_ATTR_ADDR_FAMILY IPVS_SYNCD_ATTRIBUTES IPVS_64BIT_STATS IPVS_TUN_TYPE IPVS_TUN_CSUM IPVS_TUN_GRE VRRP_IPVLAN IFLA_LINK_NETNSID GLOB_BRACE GLOB_ALTDIRFUNC INET6_ADDR_GEN_MODE VRF SO_MARK
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ keepalived --version
+Keepalived v2.2.8 (04/04,2023), git commit v2.2.7-154-g292b299e+
+
+Copyright(C) 2001-2023 Alexandre Cassen, <acassen@gmail.com>
+
+Built with kernel headers for Linux 6.8.0
+Running on Linux 6.8.0-137-generic #137-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 17 20:28:23 UTC 2026
+Distro: Ubuntu 24.04.4 LTS
+
+configure options: --build=x86_64-linux-gnu --prefix=/usr --includedir=${prefix}/include --mandir=${prefix}/share/man --infodir=${prefix}/share/info --sysconfdir=/etc --localstatedir=/var --disable-option-checking --disable-silent-rules --libdir=${prefix}/lib/x86_64-linux-gnu --runstatedir=/run --disable-maintainer-mode --disable-dependency-tracking --enable-snmp --enable-sha1 --enable-snmp-rfcv2 --enable-snmp-rfcv3 --enable-dbus --enable-json --enable-bfd --enable-regex --with-init=systemd build_alias=x86_64-linux-gnu CFLAGS=-g -O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer  -flto=auto -ffat-lto-objects -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -fdebug-prefix-map=/build/keepalived-F53vvG/keepalived-2.2.8=/usr/src/keepalived-1:2.2.8-1build2 LDFLAGS=-Wl,-Bsymbolic-functions -flto=auto -ffat-lto-objects -Wl,-z,relro CPPFLAGS=-Wdate-time -D_FORTIFY_SOURCE=3
+
+Config options:  NFTABLES LVS REGEX VRRP VRRP_AUTH VRRP_VMAC JSON BFD OLD_CHKSUM_COMPAT SNMP_V3_FOR_V2 SNMP_VRRP SNMP_CHECKER SNMP_RFCV2 SNMP_RFCV3 DBUS INIT=systemd SYSTEMD_NOTIFY
+
+System options:  VSYSLOG MEMFD_CREATE IPV6_MULTICAST_ALL IPV4_DEVCONF LIBNL3 RTA_ENCAP RTA_EXPIRES RTA_NEWDST RTA_PREF FRA_SUPPRESS_PREFIXLEN FRA_SUPPRESS_IFGROUP FRA_TUN_ID RTAX_CC_ALGO RTAX_QUICKACK RTEXT_FILTER_SKIP_STATS FRA_L3MDEV FRA_UID_RANGE RTAX_FASTOPEN_NO_COOKIE RTA_VIA FRA_PROTOCOL FRA_IP_PROTO FRA_SPORT_RANGE FRA_DPORT_RANGE RTA_TTL_PROPAGATE IFA_FLAGS LWTUNNEL_ENCAP_MPLS LWTUNNEL_ENCAP_ILA NET_LINUX_IF_H_COLLISION LIBIPVS_NETLINK IPVS_DEST_ATTR_ADDR_FAMILY IPVS_SYNCD_ATTRIBUTES IPVS_64BIT_STATS IPVS_TUN_TYPE IPVS_TUN_CSUM IPVS_TUN_GRE VRRP_IPVLAN IFLA_LINK_NETNSID GLOB_BRACE GLOB_ALTDIRFUNC INET6_ADDR_GEN_MODE VRF SO_MARK
+asvpg@vm-haproxy2:~$
+
+--проверяем существование файлов PID, убеждаемся, что HAProxy пишет свой ID туда, куда мы смотрим - путь верный
+asvpg@vm-haproxy1:~$ cat /run/haproxy.pid
+7752
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ cat /run/haproxy.pid
+7747
+asvpg@vm-haproxy2:~$
+
+--выносим секцию vrrp_script в отдельный скрипт
+asvpg@vm-haproxy1:~$ sudo mkdir -p /usr/local/bin/keepalived_scripts
+asvpg@vm-haproxy1:~$ echo '#!/bin/bash
+if [ -f /run/haproxy.pid ]; then
+    kill -0 $(cat /run/haproxy.pid)
+    exit $?
+else
+    exit 1
+fi' | sudo tee /usr/local/bin/check_haproxy.sh
+#!/bin/bash
+if [ -f /run/haproxy.pid ]; then
+    kill -0 $(cat /run/haproxy.pid)
+    exit $?
+else
+    exit 1
+fi
+asvpg@vm-haproxy1:~$ sudo chmod +x /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy1:~$ ls -l /usr/local/bin/check_haproxy.sh
+-rwxr-xr-x 1 root root 112 Aug 16 12:25 /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy1:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy1:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_01 # Уникальное имя узла в логах
+}
+
+vrrp_script check_haproxy {
+    #указываем путь к скрипту
+    script "/usr/local/bin/check_haproxy.sh"
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state MASTER                # Роль этой машины
+    interface eth0              # Смотрим интерфейс через ip a
+    virtual_router_id 51        # ID группы (должен совпадать у обеих нод)
+    priority 105                # Приоритет (чем выше, тем главнее)
+
+    advert_int 1                # Интервал объявлений о себе (секунды)
+    authentication {            # Простая защита протокола VRRP
+        auth_type PASS
+        auth_pass PASS1
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip # Плавающий IP
+    }
+
+    track_script {
+        check_haproxy           # Связываем проверку с экземпляром
+    }
+}
+asvpg@vm-haproxy1:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo chmod +x /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy2:~$ ls -l /usr/local/bin/check_haproxy.sh
+-rwxr-xr-x 1 root root 112 Aug 16 12:25 /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy2:~$ sudo nano /etc/keepalived/keepalived.conf
+asvpg@vm-haproxy2:~$ sudo cat /etc/keepalived/keepalived.conf
+global_defs {
+    router_id LVS_haproxy_02 # Уникальное имя
+}
+
+vrrp_script check_haproxy {
+    script "/usr/local/bin/check_haproxy.sh"
+    interval 2
+    weight 2
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_01 {
+    state BACKUP               # Роль ведомого
+    interface eth0             # Тот же интерфейс
+    virtual_router_id 51       # Тот же ID группы!
+    priority 100               # Приоритет ниже мастера
+
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass PASS1 # Пароль должен совпадать с мастером
+    }
+
+    virtual_ipaddress {
+        10.128.0.14 dev eth0 label eth0:vip
+    }
+
+    track_script {
+        check_haproxy
+    }
+}
+asvpg@vm-haproxy2:~$ sudo keepalived --config-test -f /etc/keepalived/keepalived.conf
+SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+asvpg@vm-haproxy2:~$
+
+asvpg@vm-haproxy1:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy1:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:29:53 haproxynode Keepalived[11066]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:29:53 haproxynode Keepalived[11066]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:29:53 haproxynode Keepalived[11066]: Starting VRRP child process, pid=11068
+Aug 16 12:29:53 haproxynode Keepalived_vrrp[11068]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:29:53 haproxynode Keepalived_vrrp[11068]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:29:53 haproxynode Keepalived[11066]: Startup complete
+Aug 16 12:29:53 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:29:53 haproxynode Keepalived_vrrp[11068]: Script `check_haproxy` now returning 1
+Aug 16 12:29:53 haproxynode Keepalived_vrrp[11068]: VRRP_Script(check_haproxy) failed (exited with status 1)
+Aug 16 12:29:57 haproxynode Keepalived_vrrp[11068]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy2:~$ sudo systemctl restart keepalived
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:29:57 haproxynode Keepalived[10629]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:29:57 haproxynode Keepalived[10629]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:29:57 haproxynode Keepalived[10629]: Starting VRRP child process, pid=10632
+Aug 16 12:29:57 haproxynode Keepalived_vrrp[10632]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:29:57 haproxynode Keepalived_vrrp[10632]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:29:57 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:29:57 haproxynode Keepalived[10629]: Startup complete
+Aug 16 12:29:57 haproxynode Keepalived_vrrp[10632]: Script `check_haproxy` now returning 1
+Aug 16 12:29:57 haproxynode Keepalived_vrrp[10632]: VRRP_Script(check_haproxy) failed (exited with status 1)
+Aug 16 12:30:01 haproxynode Keepalived_vrrp[10632]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+
+
+--меняем скрипт /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy1:~$ sudo nano /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy1:~$ sudo /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy1:~$ echo $?
+0
+asvpg@vm-haproxy1:~$ sudo systemctl stop keepalived
+asvpg@vm-haproxy1:~$ sudo cat /usr/local/bin/check_haproxy.sh
+#!/bin/bash
+if [ -f /run/haproxy.pid ] && ps -p "$(cat /run/haproxy.pid)" > /dev/null 2>&1; then
+    exit 0
+else
+    exit 1
+fi
+asvpg@vm-haproxy1:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy1:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy1:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:44:27 haproxynode Keepalived[11877]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:44:27 haproxynode Keepalived[11877]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:44:27 haproxynode Keepalived[11877]: Starting VRRP child process, pid=11878
+Aug 16 12:44:27 haproxynode Keepalived_vrrp[11878]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:44:27 haproxynode Keepalived[11877]: Startup complete
+Aug 16 12:44:27 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:44:27 haproxynode Keepalived_vrrp[11878]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:44:27 haproxynode Keepalived_vrrp[11878]: VRRP_Script(check_haproxy) succeeded
+Aug 16 12:44:27 haproxynode Keepalived_vrrp[11878]: (VI_01) Changing effective priority from 105 to 107
+Aug 16 12:44:31 haproxynode Keepalived_vrrp[11878]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo nano /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy2:~$ sudo cat /usr/local/bin/check_haproxy.sh
+#!/bin/bash
+if systemctl is-active --quiet haproxy; then
+    exit 0
+else
+    exit 1
+fi
+asvpg@vm-haproxy2:~$ sudo /usr/local/bin/check_haproxy.sh
+asvpg@vm-haproxy2:~$ echo $?
+0
+asvpg@vm-haproxy2:~$ sudo systemctl stop keepalived
+asvpg@vm-haproxy2:~$ sudo systemctl daemon-reload
+asvpg@vm-haproxy2:~$ sudo systemctl start keepalived
+asvpg@vm-haproxy2:~$ sudo journalctl -f -u keepalived --no-pager
+Aug 16 12:44:54 haproxynode Keepalived[11470]: Configuration file /etc/keepalived/keepalived.conf
+Aug 16 12:44:54 haproxynode Keepalived[11470]: NOTICE: setting config option max_auto_priority should result in better keepalived performance
+Aug 16 12:44:54 haproxynode Keepalived[11470]: Starting VRRP child process, pid=11471
+Aug 16 12:44:54 haproxynode Keepalived_vrrp[11471]: SECURITY VIOLATION - scripts are being executed but script_security not enabled.
+Aug 16 12:44:54 haproxynode Keepalived_vrrp[11471]: (VI_01) Entering BACKUP STATE (init)
+Aug 16 12:44:54 haproxynode Keepalived[11470]: Startup complete
+Aug 16 12:44:54 haproxynode systemd[1]: Started keepalived.service - Keepalive Daemon (LVS and VRRP).
+Aug 16 12:44:54 haproxynode Keepalived_vrrp[11471]: VRRP_Script(check_haproxy) succeeded
+Aug 16 12:44:54 haproxynode Keepalived_vrrp[11471]: (VI_01) Changing effective priority from 100 to 102
+Aug 16 12:44:58 haproxynode Keepalived_vrrp[11471]: (VI_01) Entering MASTER STATE
+asvpg@vm-haproxy2:~$
+```
+
+####
+Видимо, инфраструктура блокирует мультикаст-трафик VRRP (протокол 112), т.к. пинг проходит
+####
+```sh
+asvpg@vm-haproxy1:~$ ping -c 3 10.128.0.4
+PING 10.128.0.4 (10.128.0.4) 56(84) bytes of data.
+64 bytes from 10.128.0.4: icmp_seq=1 ttl=61 time=1.27 ms
+64 bytes from 10.128.0.4: icmp_seq=2 ttl=61 time=0.361 ms
+64 bytes from 10.128.0.4: icmp_seq=3 ttl=61 time=0.339 ms
+
+--- 10.128.0.4 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2055ms
+rtt min/avg/max/mdev = 0.339/0.657/1.273/0.435 ms
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ ping -c 3 10.128.0.31
+PING 10.128.0.31 (10.128.0.31) 56(84) bytes of data.
+64 bytes from 10.128.0.31: icmp_seq=1 ttl=61 time=0.312 ms
+64 bytes from 10.128.0.31: icmp_seq=2 ttl=61 time=0.546 ms
+64 bytes from 10.128.0.31: icmp_seq=3 ttl=61 time=0.441 ms
+
+--- 10.128.0.31 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2049ms
+rtt min/avg/max/mdev = 0.312/0.433/0.546/0.095 ms
+asvpg@vm-haproxy2:~$
+
+--2 ВМ не видят пакеты VRRP - и это как я считаю, главная причина split brain.
+В интерфейсе Яндекс Облака добавлял правила на открытие входящего и исходящего трафика, но не помогло. Может быть ошибся в настройке.
 ```
