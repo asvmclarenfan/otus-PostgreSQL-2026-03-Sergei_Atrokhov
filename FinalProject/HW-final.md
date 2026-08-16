@@ -25,6 +25,9 @@ OTUS – PostgreSQL для администраторов баз данных и
 ####
 <img width="2899" height="1914" alt="pr26_deploy" src="https://github.com/user-attachments/assets/6dd89ce5-9266-473d-a5fe-2232853b6ff9" />
 
+###
+Далее по каждому пункту представлены более подробные комментарии 
+###
 
 ###
 1. Настройка кластера ETCD
