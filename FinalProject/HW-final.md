@@ -3980,15 +3980,356 @@ postgres=# select usename,passwd from pg_shadow;
  admindb     | SCRAM-SHA-256$4096:UOxKB4r22j9WGjS+p/uCpQ==$awO0lcLCDGxUn9JX1TIqPJbLZ3pvIfk+Y3uxm8ruZ+s=:bIhKT3V99UHDxpkKaTH+ByfWpTZE5qkNMxYhv52bB3A=
 (4 rows)
 
---на каждой из 3 нод в файл userlist.txt укажем хеш для 2 пользователей- admindb, postgres
+--на каждой из 3 нод в файл userlist.txt укажем хеш для 2 пользователей- admindb, postgres (пароль указываем через кавычки, иначе спец символы будут экранироваться и пароль будет обрезан)
 root@vm-pg3:/etc/pgbouncer# nano userlist.txt
 root@vm-pg3:/etc/pgbouncer# cat userlist.txt
 "admindb" "SCRAM-SHA-256$4096:UOxKB4r22j9WGjS+p/uCpQ==$awO0lcLCDGxUn9JX1TIqPJbLZ3pvIfk+Y3uxm8ruZ+s=:bIhKT3V99UHDxpkKaTH+ByfWpTZE5qkNMxYhv52bB3A="
 "postgres" "SCRAM-SHA-256$4096:lw/7mLaZFdn0cSzYo2cNmQ==$FiW/u1WDfn4BzAMMNKezNkuRewIGLKwxssoDDKlXlAo=:ayX5tzUNWHZdyTSmyX3/zV1/VEi+j97e1KapH5KoVic="
 root@vm-pg3:/etc/pgbouncer#
-
 ```
 
 ####
 Запускать pgbouncer можно в качестве сервиса или в качестве демона. Второе не рекомендуется из-за сложности управления, поэтому выбираем управление через сервис.
 ####
+```sh
+asvpg@vm-pg3:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:42 UTC; 42min ago
+   Duration: 35min 24.782s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 778 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 778 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 μs, query 0 μs, wait 0>
+        CPU: 290ms
+
+Aug 16 08:09:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+Aug 16 08:10:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+Aug 16 08:11:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+Aug 16 08:12:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+Aug 16 08:13:18 vm-pg3 pgbouncer[778]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+Aug 16 08:13:42 vm-pg3 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:42 vm-pg3 pgbouncer[778]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:42 vm-pg3 pgbouncer[778]: server connections dropped, exiting
+Aug 16 08:13:42 vm-pg3 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:42 vm-pg3 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg3:~$
+asvpg@vm-pg3:~$ sudo systemctl enable pgbouncer
+Synchronizing state of pgbouncer.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable pgbouncer
+asvpg@vm-pg3:~$ sudo systemctl start pgbouncer
+asvpg@vm-pg3:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 09:12:12 UTC; 5s ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 2190 (pgbouncer)
+      Tasks: 3 (limit: 2313)
+     Memory: 1.8M (peak: 2.1M)
+        CPU: 5ms
+     CGroup: /system.slice/pgbouncer.service
+             └─2190 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 09:12:12 vm-pg3 systemd[1]: Starting pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 09:12:12 vm-pg3 pgbouncer[2190]: kernel file descriptor limit: 1024 (hard: 524288); max_client_conn: 100, max expected fd use: 172
+Aug 16 09:12:12 vm-pg3 pgbouncer[2190]: listening on 10.130.0.33:6432
+Aug 16 09:12:12 vm-pg3 pgbouncer[2190]: listening on unix:/tmp/.s.PGSQL.6432
+Aug 16 09:12:12 vm-pg3 pgbouncer[2190]: process up: PgBouncer 1.25.2, libevent 2.1.12-stable (epoll), adns: c-ares 1.27.0, tls: OpenSSL 3.0.13 3>
+Aug 16 09:12:12 vm-pg3 systemd[1]: Started pgbouncer.service - connection pooler for PostgreSQL.
+lines 1-18/18 (END)
+asvpg@vm-pg3:~$
+
+asvpg@vm-pg1:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:08 UTC; 43min ago
+   Duration: 34min 49.811s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 776 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 776 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+        CPU: 262ms
+
+Aug 16 08:08:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:09:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:10:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:11:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:12:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: server connections dropped, exiting
+Aug 16 08:13:08 vm-pg1 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:08 UTC; 59min ago
+   Duration: 34min 49.811s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 776 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 776 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+        CPU: 262ms
+
+Aug 16 08:08:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:09:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:10:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:11:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:12:18 vm-pg1 pgbouncer[776]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, >
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:08 vm-pg1 pgbouncer[776]: server connections dropped, exiting
+Aug 16 08:13:08 vm-pg1 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:08 vm-pg1 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg1:~$ sudo systemctl enable pgbouncer
+Synchronizing state of pgbouncer.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable pgbouncer
+asvpg@vm-pg1:~$
+asvpg@vm-pg1:~$ sudo systemctl start pgbouncer
+asvpg@vm-pg1:~$ sudo systemctl enable pgbouncer
+Synchronizing state of pgbouncer.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable pgbouncer
+asvpg@vm-pg1:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 09:13:16 UTC; 8s ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 1773 (pgbouncer)
+      Tasks: 3 (limit: 2313)
+     Memory: 1.8M (peak: 2.3M)
+        CPU: 9ms
+     CGroup: /system.slice/pgbouncer.service
+             └─1773 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 09:13:16 vm-pg1 systemd[1]: Starting pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 09:13:16 vm-pg1 pgbouncer[1773]: kernel file descriptor limit: 1024 (hard: 524288); max_client_conn: 100, max ex>
+Aug 16 09:13:16 vm-pg1 pgbouncer[1773]: listening on 10.130.0.13:6432
+Aug 16 09:13:16 vm-pg1 pgbouncer[1773]: listening on unix:/tmp/.s.PGSQL.6432
+Aug 16 09:13:16 vm-pg1 pgbouncer[1773]: process up: PgBouncer 1.25.2, libevent 2.1.12-stable (epoll), adns: c-ares 1.27>
+Aug 16 09:13:16 vm-pg1 systemd[1]: Started pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg2:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:39 UTC; 42min ago
+   Duration: 8min 5.067s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 1593 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 1593 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+        CPU: 62ms
+
+Aug 16 08:09:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:10:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:11:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:12:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:13:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:13:38 vm-pg2 pgbouncer[1593]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:38 vm-pg2 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:39 vm-pg2 pgbouncer[1593]: server connections dropped, exiting
+Aug 16 08:13:39 vm-pg2 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:39 vm-pg2 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg2:~$
+asvpg@vm-pg2:~$
+asvpg@vm-pg2:~$ sudo systemctl status pgbouncer
+○ pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: inactive (dead) since Sun 2026-08-16 08:13:39 UTC; 1h 0min ago
+   Duration: 8min 5.067s
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+    Process: 1593 ExecStart=/usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini (code=exited, status=0/SUCCESS)
+   Main PID: 1593 (code=exited, status=0/SUCCESS)
+     Status: "stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact>
+        CPU: 62ms
+
+Aug 16 08:09:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:10:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:11:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:12:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:13:33 vm-pg2 pgbouncer[1593]: stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s,>
+Aug 16 08:13:38 vm-pg2 pgbouncer[1593]: got SIGINT, shutting down, waiting for all servers connections to be released
+Aug 16 08:13:38 vm-pg2 systemd[1]: Stopping pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 08:13:39 vm-pg2 pgbouncer[1593]: server connections dropped, exiting
+Aug 16 08:13:39 vm-pg2 systemd[1]: pgbouncer.service: Deactivated successfully.
+Aug 16 08:13:39 vm-pg2 systemd[1]: Stopped pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg2:~$ sudo systemctl enable pgbouncer
+Synchronizing state of pgbouncer.service with SysV service script with /usr/lib/systemd/systemd-sysv-install.
+Executing: /usr/lib/systemd/systemd-sysv-install enable pgbouncer
+asvpg@vm-pg2:~$
+asvpg@vm-pg2:~$ sudo systemctl start pgbouncer
+asvpg@vm-pg2:~$
+asvpg@vm-pg2:~$ sudo systemctl status pgbouncer
+● pgbouncer.service - connection pooler for PostgreSQL
+     Loaded: loaded (/usr/lib/systemd/system/pgbouncer.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 09:14:00 UTC; 3s ago
+       Docs: man:pgbouncer(1)
+             https://www.pgbouncer.org/
+   Main PID: 2307 (pgbouncer)
+      Tasks: 3 (limit: 2313)
+     Memory: 1.8M (peak: 2.2M)
+        CPU: 7ms
+     CGroup: /system.slice/pgbouncer.service
+             └─2307 /usr/sbin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+
+Aug 16 09:14:00 vm-pg2 systemd[1]: Starting pgbouncer.service - connection pooler for PostgreSQL...
+Aug 16 09:14:00 vm-pg2 pgbouncer[2307]: kernel file descriptor limit: 1024 (hard: 524288); max_client_conn: 100, max ex>
+Aug 16 09:14:00 vm-pg2 pgbouncer[2307]: listening on 10.130.0.28:6432
+Aug 16 09:14:00 vm-pg2 pgbouncer[2307]: listening on unix:/tmp/.s.PGSQL.6432
+Aug 16 09:14:00 vm-pg2 pgbouncer[2307]: process up: PgBouncer 1.25.2, libevent 2.1.12-stable (epoll), adns: c-ares 1.27>
+Aug 16 09:14:00 vm-pg2 systemd[1]: Started pgbouncer.service - connection pooler for PostgreSQL.
+asvpg@vm-pg2:~$
+```
+
+####
+Проверяем правильность настроек через подключение
+####
+```sh
+--напрямую
+asvpg@vm-pg3:~$ sudo -u postgres psql -p 5432 -d thai -h localhost
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=# exit
+asvpg@vm-pg3:~$
+
+--через pgbouncer
+asvpg@vm-pg3:~$ sudo -u postgres psql -p 6432 -d thai -h 10.130.0.33
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=# exit
+asvpg@vm-pg3:~$
+```
+
+####
+Если не хочется следить за списком пользователей, которые могут использовать pgbouncer, можно в конфиге добавить опцию auth_query с запросом на вывод списка пользователей из pg_shadow
+####
+```sh
+auth_query = SELECT usename, passwd FROM pg_shadow WHERE usename=$1
+```
+
+####
+Логи изучаем здесь
+####
+```sh
+asvpg@vm-pg3:~$ sudo tail /var/log/postgresql/pgbouncer.log
+2026-08-16 09:20:05.545 UTC [2190] LOG C-0x6252920d18b0: thai/postgres@10.130.0.13:39604 login attempt: db=thai user=postgres tls=no replication=no
+2026-08-16 09:20:07.621 UTC [2190] LOG C-0x6252920d18b0: thai/postgres@10.130.0.13:39612 login attempt: db=thai user=postgres tls=no replication=no
+2026-08-16 09:20:12.872 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 2 B/s, xact 1689 us, query 1689 us, wait 202 us
+2026-08-16 09:20:13.788 UTC [2190] LOG C-0x6252920d18b0: thai/postgres@10.130.0.13:39612 closing because: client close request (age=6s)
+2026-08-16 09:21:12.871 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+2026-08-16 09:22:12.870 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+2026-08-16 09:23:12.872 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+2026-08-16 09:24:12.870 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+2026-08-16 09:25:12.871 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+2026-08-16 09:26:12.871 UTC [2190] LOG stats: 0 xacts/s, 0 queries/s, 0 client parses/s, 0 server parses/s, 0 binds/s, in 0 B/s, out 0 B/s, xact 0 us, query 0 us, wait 0 us
+asvpg@vm-pg3:~$
+```
+
+####
+Есть отдельная админ консоль (через SQL*Lite) для подключения пользователя, указанного в конфиге в опции admin_users
+####
+```sh
+asvpg@vm-pg3:~$ sudo -u postgres psql -p 6432 pgbouncer -h 10.130.0.33 -U admindb
+Password for user admindb:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2), server 1.25.2/bouncer)
+WARNING: psql major version 17, server major version 1.25.
+         Some psql features might not work.
+Type "help" for help.
+
+pgbouncer=#
+
+pgbouncer=# show clients;
+ type |  user   | database  | replication | state |    addr     | port  | local_addr  | local_port |      connect_time       |      request_time       | wait | wait_us | close_needed |      ptr       | link | remote_pid | tls | application_name | prepared_statements | id
+------+---------+-----------+-------------+-------+-------------+-------+-------------+------------+-------------------------+-------------------------+------+---------+--------------+----------------+------+------------+-----+------------------+---------------------+----
+ C    | admindb | pgbouncer | none        | idle  | 10.130.0.33 | 46080 | 10.130.0.33 |       6432 | 2026-08-16 09:28:58 UTC | 2026-08-16 09:31:14 UTC |    0 |       0 |            0 | 0x6252920d18b0 |      |          0 |     | psql             |                   0 |  7
+(1 row)
+
+pgbouncer=# show servers;
+ type | user | database | replication | state | addr | port | local_addr | local_port | connect_time | request_time | wait | wait_us | close_needed | ptr | link | remote_pid | tls | application_name | prepared_statements | id
+------+------+----------+-------------+-------+------+------+------------+------------+--------------+--------------+------+---------+--------------+-----+------+------------+-----+------------------+---------------------+----
+(0 rows)
+
+pgbouncer=# show pools;
+ database  |   user    | cl_active | cl_waiting | cl_active_cancel_req | cl_waiting_cancel_req | sv_active | sv_active_cancel | sv_being_canceled | sv_idle | sv_used | sv_tested | sv_login | maxwait | maxwait_us | pool_mode | load_balance_hosts
+-----------+-----------+-----------+------------+----------------------+-----------------------+-----------+------------------+-------------------+---------+---------+-----------+----------+---------+------------+-----------+--------------------
+ pgbouncer | pgbouncer |         2 |          0 |                    0 |                     0 |         0 |                0 |                 0 |       0 |       0 |         0 |        0 |       0 |          0 | statement |
+ thai      | postgres  |         0 |          0 |                    0 |                     0 |         0 |                0 |                 0 |       0 |       0 |         0 |        0 |       0 |          0 | session   |
+(2 rows)
+
+pgbouncer=# show stats_totals;
+ database  | server_assignment_count | xact_count | query_count | bytes_received | bytes_sent | xact_time | query_time | wait_time | client_parse_count | server_parse_count | bind_count
+-----------+-------------------------+------------+-------------+----------------+------------+-----------+------------+-----------+--------------------+--------------------+------------
+ pgbouncer |                       0 |          2 |           2 |              0 |          0 |         0 |          0 |         0 |                  0 |                  0 |          0
+ thai      |                       2 |          2 |           2 |            998 |       1311 |      5138 |       5138 |      8617 |                  0 |                  0 |          0
+(2 rows)
+
+--можно ставить на паузу будущие подключения к БД и возобновлять их
+pgbouncer=# pause thai;
+PAUSE
+pgbouncer=# resume thai;
+RESUME
+pgbouncer=#
+```
+
+###
+5. Настройка HAProxy
+###
+####
+В работе с кластером БД встает вопрос: как узнать, где у нас лидер\мастер? Особенно, после смены ролей в кластере (switchover, failover). Для этого используется HAProxy. С 2025 года HAProxy стал платным, можно собирать из исходников, но в целом именно по этой причине (из-за кибербезопасников) многие ушли от использования HAProxy и в строке jdbc подключения к БД указывают server_type (primary\secondary).
+####
+
+####
+HAProxy будет работать на 2 ВМ в другой сетевой зоне (ЦОДе)
+####
+```sh
+vm-haproxy1  10.128.0.31
+vm-haproxy2  10.128.0.4
+```
+
