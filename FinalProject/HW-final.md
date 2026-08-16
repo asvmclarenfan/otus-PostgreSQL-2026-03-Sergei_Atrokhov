@@ -4322,7 +4322,7 @@ pgbouncer=#
 5. Настройка HAProxy
 ###
 ####
-В работе с кластером БД встает вопрос: как узнать, где у нас лидер\мастер? Особенно, после смены ролей в кластере (switchover, failover). Для этого используется HAProxy. С 2025 года HAProxy стал платным, можно собирать из исходников, но в целом именно по этой причине (из-за кибербезопасников) многие ушли от использования HAProxy и в строке jdbc подключения к БД указывают server_type (primary\secondary).
+В работе с кластером БД встает вопрос: как узнать, где у нас лидер\мастер? Особенно, после смены ролей в кластере (switchover, failover). Для этого используется HAProxy. С 2025 года HAProxy стал платным, можно собирать из исходников, но в целом именно по этой причине (из-за кибербезопасников) многие ушли от использования HAProxy и в строке jdbc подключения к БД указывают server_type (primary\secondary). HAProxy является очень легковесным.
 ####
 
 ####
@@ -4333,3 +4333,1184 @@ vm-haproxy1  10.128.0.31
 vm-haproxy2  10.128.0.4
 ```
 
+####
+Устанавливаем HAProxy на 2 ноды
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease [126 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease [126 kB]
+Get:4 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Packages [1191 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main Translation-en [282 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Components [180 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/universe Translation-en [335 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/restricted amd64 Packages [1424 kB]
+Get:12 http://mirror.yandex.ru/ubuntu noble-updates/restricted Translation-en [323 kB]
+Get:13 http://mirror.yandex.ru/ubuntu noble-updates/multiverse Translation-en [12.6 kB]
+Get:14 http://mirror.yandex.ru/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:15 http://mirror.yandex.ru/ubuntu noble-backports/main amd64 Components [5740 B]
+Get:16 http://mirror.yandex.ru/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+Get:17 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [934 kB]
+Get:18 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [202 kB]
+Get:19 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+Get:20 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1201 kB]
+Get:21 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [240 kB]
+Get:22 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.3 kB]
+Get:23 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1330 kB]
+Get:24 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [304 kB]
+Get:25 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [10.9 kB]
+Fetched 10.6 MB in 2s (5354 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+17 packages can be upgraded. Run 'apt list --upgradable' to see them.
+asvpg@vm-haproxy1:~$ sudo hostnamectl set-hostname haproxynode
+asvpg@vm-haproxy1:~$ sudo apt install net-tools
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  net-tools
+0 upgraded, 1 newly installed, 0 to remove and 17 not upgraded.
+Need to get 204 kB of archives.
+After this operation, 811 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 net-tools amd64 2.10-0.1ubuntu4.4 [204 kB]
+Fetched 204 kB in 0s (6606 kB/s)
+Selecting previously unselected package net-tools.
+(Reading database ... 106575 files and directories currently installed.)
+Preparing to unpack .../net-tools_2.10-0.1ubuntu4.4_amd64.deb ...
+Unpacking net-tools (2.10-0.1ubuntu4.4) ...
+Setting up net-tools (2.10-0.1ubuntu4.4) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy1:~$ sudo apt -y install haproxy
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  liblua5.4-0
+Suggested packages:
+  vim-haproxy haproxy-doc
+The following NEW packages will be installed:
+  haproxy liblua5.4-0
+0 upgraded, 2 newly installed, 0 to remove and 17 not upgraded.
+Need to get 2236 kB of archives.
+After this operation, 5274 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 liblua5.4-0 amd64 5.4.6-3build2 [166 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 haproxy amd64 2.8.16-0ubuntu0.24.04.3 [2070 kB]
+Fetched 2236 kB in 0s (8549 kB/s)
+Selecting previously unselected package liblua5.4-0:amd64.
+(Reading database ... 106623 files and directories currently installed.)
+Preparing to unpack .../liblua5.4-0_5.4.6-3build2_amd64.deb ...
+Unpacking liblua5.4-0:amd64 (5.4.6-3build2) ...
+Selecting previously unselected package haproxy.
+Preparing to unpack .../haproxy_2.8.16-0ubuntu0.24.04.3_amd64.deb ...
+Unpacking haproxy (2.8.16-0ubuntu0.24.04.3) ...
+Setting up liblua5.4-0:amd64 (5.4.6-3build2) ...
+Setting up haproxy (2.8.16-0ubuntu0.24.04.3) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/haproxy.service → /usr/lib/systemd/system/haproxy.service.
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for rsyslog (8.2312.0-3ubuntu9.3) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo apt update
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease [126 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease [126 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Packages [1191 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main Translation-en [282 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 Components [180 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Packages [1683 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/universe Translation-en [335 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/universe amd64 Components [388 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/restricted amd64 Packages [1424 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/restricted Translation-en [323 kB]
+Get:12 http://mirror.yandex.ru/ubuntu noble-updates/multiverse Translation-en [12.6 kB]
+Get:13 http://mirror.yandex.ru/ubuntu noble-updates/multiverse amd64 Components [940 B]
+Get:14 http://mirror.yandex.ru/ubuntu noble-backports/main amd64 Components [5740 B]
+Get:15 http://mirror.yandex.ru/ubuntu noble-backports/universe amd64 Components [12.6 kB]
+Get:16 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:17 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [934 kB]
+Get:18 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [202 kB]
+Get:19 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [46.4 kB]
+Get:20 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1201 kB]
+Get:21 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [240 kB]
+Get:22 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [76.3 kB]
+Get:23 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [1330 kB]
+Get:24 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [304 kB]
+Get:25 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [10.9 kB]
+Fetched 10.6 MB in 31s (336 kB/s)
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+17 packages can be upgraded. Run 'apt list --upgradable' to see them.
+asvpg@vm-haproxy2:~$ sudo hostnamectl set-hostname haproxynode
+asvpg@vm-haproxy2:~$ sudo apt install net-tools
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  net-tools
+0 upgraded, 1 newly installed, 0 to remove and 17 not upgraded.
+Need to get 204 kB of archives.
+After this operation, 811 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 net-tools amd64 2.10-0.1ubuntu4.4 [204 kB]
+Fetched 204 kB in 0s (5088 kB/s)
+Selecting previously unselected package net-tools.
+(Reading database ... 106575 files and directories currently installed.)
+Preparing to unpack .../net-tools_2.10-0.1ubuntu4.4_amd64.deb ...
+Unpacking net-tools (2.10-0.1ubuntu4.4) ...
+Setting up net-tools (2.10-0.1ubuntu4.4) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy2:~$ sudo apt -y install haproxy
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  liblua5.4-0
+Suggested packages:
+  vim-haproxy haproxy-doc
+The following NEW packages will be installed:
+  haproxy liblua5.4-0
+0 upgraded, 2 newly installed, 0 to remove and 17 not upgraded.
+Need to get 2236 kB of archives.
+After this operation, 5274 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble/main amd64 liblua5.4-0 amd64 5.4.6-3build2 [166 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 haproxy amd64 2.8.16-0ubuntu0.24.04.3 [2070 kB]
+Fetched 2236 kB in 0s (24.7 MB/s)
+Selecting previously unselected package liblua5.4-0:amd64.
+(Reading database ... 106623 files and directories currently installed.)
+Preparing to unpack .../liblua5.4-0_5.4.6-3build2_amd64.deb ...
+Unpacking liblua5.4-0:amd64 (5.4.6-3build2) ...
+Selecting previously unselected package haproxy.
+Preparing to unpack .../haproxy_2.8.16-0ubuntu0.24.04.3_amd64.deb ...
+Unpacking haproxy (2.8.16-0ubuntu0.24.04.3) ...
+Setting up liblua5.4-0:amd64 (5.4.6-3build2) ...
+Setting up haproxy (2.8.16-0ubuntu0.24.04.3) ...
+Created symlink /etc/systemd/system/multi-user.target.wants/haproxy.service → /usr/lib/systemd/system/haproxy.service.
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for rsyslog (8.2312.0-3ubuntu9.3) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy2:~$
+```
+
+####
+Проверяем пинг с нод HAProxy на ноды PostgreSQL. Работает даже с коротким именем, но лучше использовать FQDN.
+####
+```sh
+asvpg@vm-haproxy1:~$ ping vm-pg1
+PING vm-pg1.ru-central1.internal (10.130.0.13) 56(84) bytes of data.
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=1 ttl=61 time=6.81 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=2 ttl=61 time=5.16 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=3 ttl=61 time=5.13 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=4 ttl=61 time=5.23 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=5 ttl=61 time=5.17 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=6 ttl=61 time=5.15 ms
+--- vm-pg1.ru-central1.internal ping statistics ---
+6 packets transmitted, 6 received, 0% packet loss, time 5007ms
+rtt min/avg/max/mdev = 5.132/5.441/6.811/0.613 ms
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ ping vm-pg1.ru-central1.internal
+PING vm-pg1.ru-central1.internal (10.130.0.13) 56(84) bytes of data.
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=1 ttl=61 time=5.09 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=2 ttl=61 time=5.14 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=3 ttl=61 time=5.28 ms
+--- vm-pg1.ru-central1.internal ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms
+rtt min/avg/max/mdev = 5.094/5.173/5.282/0.079 ms
+asvpg@vm-haproxy1:~$ ping vm-pg2.ru-central1.internal
+PING vm-pg2.ru-central1.internal (10.130.0.28) 56(84) bytes of data.
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=1 ttl=61 time=5.67 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=2 ttl=61 time=5.18 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=3 ttl=61 time=5.15 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=4 ttl=61 time=5.35 ms
+--- vm-pg2.ru-central1.internal ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 5.148/5.335/5.668/0.206 ms
+asvpg@vm-haproxy1:~$ ping vm-pg3.ru-central1.internal
+PING vm-pg3.ru-central1.internal (10.130.0.33) 56(84) bytes of data.
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=1 ttl=61 time=5.86 ms
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=2 ttl=61 time=5.39 ms
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=3 ttl=61 time=5.06 ms
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=4 ttl=61 time=5.15 ms
+q64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=5 ttl=61 time=5.18 ms
+--- vm-pg3.ru-central1.internal ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4005ms
+rtt min/avg/max/mdev = 5.061/5.327/5.859/0.286 ms
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ ping vm-pg1.ru-central1.internal
+PING vm-pg1.ru-central1.internal (10.130.0.13) 56(84) bytes of data.
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=1 ttl=61 time=5.78 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=2 ttl=61 time=5.12 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=3 ttl=61 time=5.16 ms
+64 bytes from vm-pg1.ru-central1.internal (10.130.0.13): icmp_seq=4 ttl=61 time=5.11 ms
+--- vm-pg1.ru-central1.internal ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 5.114/5.289/5.775/0.280 ms
+asvpg@vm-haproxy2:~$ ping vm-pg2.ru-central1.internal
+PING vm-pg2.ru-central1.internal (10.130.0.28) 56(84) bytes of data.
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=1 ttl=61 time=5.83 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=2 ttl=61 time=5.11 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=3 ttl=61 time=5.15 ms
+64 bytes from vm-pg2.ru-central1.internal (10.130.0.28): icmp_seq=4 ttl=61 time=5.19 ms
+--- vm-pg2.ru-central1.internal ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 5.109/5.318/5.827/0.295 ms
+asvpg@vm-haproxy2:~$ ping vm-pg3.ru-central1.internal
+PING vm-pg3.ru-central1.internal (10.130.0.33) 56(84) bytes of data.
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=1 ttl=61 time=5.81 ms
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=2 ttl=61 time=5.33 ms
+64 bytes from vm-pg3.ru-central1.internal (10.130.0.33): icmp_seq=3 ttl=61 time=5.21 ms
+--- vm-pg3.ru-central1.internal ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2003ms
+rtt min/avg/max/mdev = 5.205/5.447/5.812/0.262 ms
+asvpg@vm-haproxy2:~$
+
+
+--Выполним curl и убедимся, что по внутренней сети Patroni доступен
+asvpg@vm-haproxy1:~$ curl -v 10.130.0.13:8008/master
+*   Trying 10.130.0.13:8008...
+* Connected to 10.130.0.13 (10.130.0.13) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.13:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 503 Service Unavailable
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:04:45 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 07:38:24.299546+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637587944, "replayed_location": 637587944, "replayed_timestamp": "2026-08-16 08:43:49.708247+00:00", "paused": false}, "timeline": 11, "replication_state": "streaming", "dcs_last_seen": 1786874684, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg1"}}asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ curl -v 10.130.0.28:8008/master
+*   Trying 10.130.0.28:8008...
+* Connected to 10.130.0.28 (10.130.0.28) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.28:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 503 Service Unavailable
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:04:54 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 08:02:22.287104+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637587944, "replayed_location": 637587944, "replayed_timestamp": "2026-08-16 08:43:49.708247+00:00", "paused": false}, "timeline": 11, "replication_state": "streaming", "dcs_last_seen": 1786874694, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg2"}}asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ curl -v 10.130.0.33:8008/master
+*   Trying 10.130.0.33:8008...
+* Connected to 10.130.0.33 (10.130.0.33) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.33:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 200 OK
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:05:00 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 07:38:20.379850+00:00", "role": "primary", "server_version": 170011, "xlog": {"location": 637587944}, "timeline": 11, "replication": [{"usename": "repl_user", "application_name": "vm-pg1", "client_addr": "10.130.0.13", "state": "streaming", "sync_state": "async", "sync_priority": 0}, {"usename": "repl_user", "application_name": "vm-pg2", "client_addr": "10.130.0.28", "state": "streaming", "sync_state": "async", "sync_priority": 0}], "dcs_last_seen": 1786874693, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg3"}}asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$
+
+
+asvpg@vm-haproxy2:~$ curl -v 10.130.0.13:8008/master
+*   Trying 10.130.0.13:8008...
+* Connected to 10.130.0.13 (10.130.0.13) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.13:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 503 Service Unavailable
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:06:03 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 07:38:24.299546+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637587944, "replayed_location": 637587944, "replayed_timestamp": "2026-08-16 08:43:49.708247+00:00", "paused": false}, "timeline": 11, "replication_state": "streaming", "dcs_last_seen": 1786874754, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg1"}}asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$ curl -v 10.130.0.28:8008/master
+*   Trying 10.130.0.28:8008...
+* Connected to 10.130.0.28 (10.130.0.28) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.28:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 503 Service Unavailable
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:06:18 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 08:02:22.287104+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637587944, "replayed_location": 637587944, "replayed_timestamp": "2026-08-16 08:43:49.708247+00:00", "paused": false}, "timeline": 11, "replication_state": "streaming", "dcs_last_seen": 1786874774, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg2"}}asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$ curl -v 10.130.0.33:8008/master
+*   Trying 10.130.0.33:8008...
+* Connected to 10.130.0.33 (10.130.0.33) port 8008
+> GET /master HTTP/1.1
+> Host: 10.130.0.33:8008
+> User-Agent: curl/8.5.0
+> Accept: */*
+>
+* HTTP 1.0, assume close after body
+< HTTP/1.0 200 OK
+< Server: BaseHTTP/0.6 Python/3.12.3
+< Date: Sun, 16 Aug 2026 10:06:22 GMT
+< Content-Type: application/json
+<
+* Closing connection
+{"state": "running", "postmaster_start_time": "2026-08-16 07:38:20.379850+00:00", "role": "primary", "server_version": 170011, "xlog": {"location": 637587944}, "timeline": 11, "replication": [{"usename": "repl_user", "application_name": "vm-pg1", "client_addr": "10.130.0.13", "state": "streaming", "sync_state": "async", "sync_priority": 0}, {"usename": "repl_user", "application_name": "vm-pg2", "client_addr": "10.130.0.28", "state": "streaming", "sync_state": "async", "sync_priority": 0}], "dcs_last_seen": 1786874773, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg3"}}asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$
+```
+
+####
+Проверим доступ, установив на нодах HAProxy ПО PostgreSQL (должен быть доступ в другой ЦОД по внутренней сети)
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo apt update && sudo apt upgrade -y && sudo apt install -y postgresql-client-common && sudo apt install postgresql-client -y
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Hit:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease
+Hit:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease
+Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+17 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+The following packages have been kept back:
+  google-compute-engine-oslogin
+The following packages will be upgraded:
+  krb5-locales libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0 libnss-systemd libpam-systemd libsystemd-shared libsystemd0
+  libudev1 systemd systemd-dev systemd-resolved systemd-sysv systemd-timesyncd udev
+16 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+11 standard LTS security updates
+Need to get 9504 kB of archives.
+After this operation, 18.4 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libnss-systemd amd64 255.4-1ubuntu8.17 [159 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-dev all 255.4-1ubuntu8.17 [107 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-timesyncd amd64 255.4-1ubuntu8.17 [35.3 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-resolved amd64 255.4-1ubuntu8.17 [297 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd-shared amd64 255.4-1ubuntu8.17 [2077 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd0 amd64 255.4-1ubuntu8.17 [432 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-sysv amd64 255.4-1ubuntu8.17 [11.9 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libpam-systemd amd64 255.4-1ubuntu8.17 [235 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd amd64 255.4-1ubuntu8.17 [3475 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 udev amd64 255.4-1ubuntu8.17 [1875 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libudev1 amd64 255.4-1ubuntu8.17 [178 kB]
+Get:12 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 krb5-locales all 1.20.1-6ubuntu2.8 [15.1 kB]
+Get:13 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libgssapi-krb5-2 amd64 1.20.1-6ubuntu2.8 [143 kB]
+Get:14 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5-3 amd64 1.20.1-6ubuntu2.8 [348 kB]
+Get:15 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5support0 amd64 1.20.1-6ubuntu2.8 [34.7 kB]
+Get:16 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libk5crypto3 amd64 1.20.1-6ubuntu2.8 [81.9 kB]
+Fetched 9504 kB in 0s (87.4 MB/s)
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../0-libnss-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libnss-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../1-systemd-dev_255.4-1ubuntu8.17_all.deb ...
+Unpacking systemd-dev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../2-systemd-timesyncd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-timesyncd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../3-systemd-resolved_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-resolved (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../4-libsystemd-shared_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd-shared:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../5-libsystemd0_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd0:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libsystemd0:amd64 (255.4-1ubuntu8.17) ...
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../systemd-sysv_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-sysv (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libpam-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libpam-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../udev_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking udev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libudev1_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libudev1:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libudev1:amd64 (255.4-1ubuntu8.17) ...
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../krb5-locales_1.20.1-6ubuntu2.8_all.deb ...
+Unpacking krb5-locales (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libgssapi-krb5-2_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5-3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5-3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5support0_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5support0:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libk5crypto3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libk5crypto3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Setting up systemd-dev (255.4-1ubuntu8.17) ...
+Setting up krb5-locales (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5support0:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libsystemd-shared:amd64 (255.4-1ubuntu8.17) ...
+Setting up libk5crypto3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5-3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up systemd (255.4-1ubuntu8.17) ...
+Setting up systemd-timesyncd (255.4-1ubuntu8.17) ...
+Setting up libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up udev (255.4-1ubuntu8.17) ...
+Setting up systemd-resolved (255.4-1ubuntu8.17) ...
+Setting up systemd-sysv (255.4-1ubuntu8.17) ...
+Setting up libnss-systemd:amd64 (255.4-1ubuntu8.17) ...
+Setting up libpam-systemd:amd64 (255.4-1ubuntu8.17) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for initramfs-tools (0.142ubuntu25.8) ...
+update-initramfs: Generating /boot/initrd.img-6.8.0-137-generic
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart fwupd.service haproxy.service multipathd.service packagekit.service polkit.service rsyslog.service ssh.service udisks2.service
+
+Service restarts being deferred:
+ systemctl restart ModemManager.service
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: apt[2358], sshd[1078]
+ asvpg @ user manager service: systemd[1088]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  postgresql-client-common
+0 upgraded, 1 newly installed, 0 to remove and 1 not upgraded.
+Need to get 36.4 kB of archives.
+After this operation, 134 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client-common all 257build1.1 [36.4 kB]
+Fetched 36.4 kB in 0s (1280 kB/s)
+Selecting previously unselected package postgresql-client-common.
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../postgresql-client-common_257build1.1_all.deb ...
+Unpacking postgresql-client-common (257build1.1) ...
+Setting up postgresql-client-common (257build1.1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1078]
+ asvpg @ user manager service: systemd[1088]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libpq5 postgresql-client-16
+Suggested packages:
+  postgresql-16 postgresql-doc-16
+The following NEW packages will be installed:
+  libpq5 postgresql-client postgresql-client-16
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 1458 kB of archives.
+After this operation, 4830 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libpq5 amd64 16.14-0ubuntu0.24.04.1 [147 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client-16 amd64 16.14-0ubuntu0.24.04.1 [1300 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client all 16+257build1.1 [11.6 kB]
+Fetched 1458 kB in 0s (18.2 MB/s)
+Selecting previously unselected package libpq5:amd64.
+(Reading database ... 106759 files and directories currently installed.)
+Preparing to unpack .../libpq5_16.14-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking libpq5:amd64 (16.14-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql-client-16.
+Preparing to unpack .../postgresql-client-16_16.14-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking postgresql-client-16 (16.14-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql-client.
+Preparing to unpack .../postgresql-client_16+257build1.1_all.deb ...
+Unpacking postgresql-client (16+257build1.1) ...
+Setting up libpq5:amd64 (16.14-0ubuntu0.24.04.1) ...
+Setting up postgresql-client-16 (16.14-0ubuntu0.24.04.1) ...
+update-alternatives: using /usr/share/postgresql/16/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up postgresql-client (16+257build1.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1078]
+ asvpg @ user manager service: systemd[1088]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy1:~$
+
+
+asvpg@vm-haproxy1:~$ psql -p 6432 -d thai -h 10.130.0.33 -U postgres
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+
+
+asvpg@vm-haproxy2:~$ sudo apt update && sudo apt upgrade -y && sudo apt install -y postgresql-client-common && sudo apt install postgresql-client -y
+Hit:1 http://mirror.yandex.ru/ubuntu noble InRelease
+Hit:2 http://mirror.yandex.ru/ubuntu noble-updates InRelease
+Hit:3 http://mirror.yandex.ru/ubuntu noble-backports InRelease
+Hit:4 http://security.ubuntu.com/ubuntu noble-security InRelease
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+17 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+Calculating upgrade... Done
+The following packages have been kept back:
+  google-compute-engine-oslogin
+The following packages will be upgraded:
+  krb5-locales libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0 libnss-systemd libpam-systemd libsystemd-shared
+  libsystemd0 libudev1 systemd systemd-dev systemd-resolved systemd-sysv systemd-timesyncd udev
+16 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+11 standard LTS security updates
+Need to get 9504 kB of archives.
+After this operation, 18.4 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libnss-systemd amd64 255.4-1ubuntu8.17 [159 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-dev all 255.4-1ubuntu8.17 [107 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-timesyncd amd64 255.4-1ubuntu8.17 [35.3 kB]
+Get:4 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-resolved amd64 255.4-1ubuntu8.17 [297 kB]
+Get:5 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd-shared amd64 255.4-1ubuntu8.17 [2077 kB]
+Get:6 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libsystemd0 amd64 255.4-1ubuntu8.17 [432 kB]
+Get:7 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd-sysv amd64 255.4-1ubuntu8.17 [11.9 kB]
+Get:8 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libpam-systemd amd64 255.4-1ubuntu8.17 [235 kB]
+Get:9 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 systemd amd64 255.4-1ubuntu8.17 [3475 kB]
+Get:10 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 udev amd64 255.4-1ubuntu8.17 [1875 kB]
+Get:11 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libudev1 amd64 255.4-1ubuntu8.17 [178 kB]
+Get:12 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 krb5-locales all 1.20.1-6ubuntu2.8 [15.1 kB]
+Get:13 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libgssapi-krb5-2 amd64 1.20.1-6ubuntu2.8 [143 kB]
+Get:14 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5-3 amd64 1.20.1-6ubuntu2.8 [348 kB]
+Get:15 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libkrb5support0 amd64 1.20.1-6ubuntu2.8 [34.7 kB]
+Get:16 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libk5crypto3 amd64 1.20.1-6ubuntu2.8 [81.9 kB]
+Fetched 9504 kB in 0s (95.7 MB/s)
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../0-libnss-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libnss-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../1-systemd-dev_255.4-1ubuntu8.17_all.deb ...
+Unpacking systemd-dev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../2-systemd-timesyncd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-timesyncd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../3-systemd-resolved_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-resolved (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../4-libsystemd-shared_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd-shared:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../5-libsystemd0_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libsystemd0:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libsystemd0:amd64 (255.4-1ubuntu8.17) ...
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../systemd-sysv_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd-sysv (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libpam-systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libpam-systemd:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../systemd_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking systemd (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../udev_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking udev (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Preparing to unpack .../libudev1_255.4-1ubuntu8.17_amd64.deb ...
+Unpacking libudev1:amd64 (255.4-1ubuntu8.17) over (255.4-1ubuntu8.16) ...
+Setting up libudev1:amd64 (255.4-1ubuntu8.17) ...
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../krb5-locales_1.20.1-6ubuntu2.8_all.deb ...
+Unpacking krb5-locales (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libgssapi-krb5-2_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5-3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5-3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libkrb5support0_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libkrb5support0:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Preparing to unpack .../libk5crypto3_1.20.1-6ubuntu2.8_amd64.deb ...
+Unpacking libk5crypto3:amd64 (1.20.1-6ubuntu2.8) over (1.20.1-6ubuntu2.7) ...
+Setting up systemd-dev (255.4-1ubuntu8.17) ...
+Setting up krb5-locales (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5support0:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libsystemd-shared:amd64 (255.4-1ubuntu8.17) ...
+Setting up libk5crypto3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up libkrb5-3:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up systemd (255.4-1ubuntu8.17) ...
+Setting up systemd-timesyncd (255.4-1ubuntu8.17) ...
+Setting up libgssapi-krb5-2:amd64 (1.20.1-6ubuntu2.8) ...
+Setting up udev (255.4-1ubuntu8.17) ...
+Setting up systemd-resolved (255.4-1ubuntu8.17) ...
+Setting up systemd-sysv (255.4-1ubuntu8.17) ...
+Setting up libnss-systemd:amd64 (255.4-1ubuntu8.17) ...
+Setting up libpam-systemd:amd64 (255.4-1ubuntu8.17) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for initramfs-tools (0.142ubuntu25.8) ...
+update-initramfs: Generating /boot/initrd.img-6.8.0-137-generic
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+ systemctl restart fwupd-refresh.service fwupd.service haproxy.service multipathd.service packagekit.service polkit.service rsyslog.service ssh.service udisks2.service
+Job for fwupd-refresh.service failed because the control process exited with error code.
+See "systemctl status fwupd-refresh.service" and "journalctl -xeu fwupd-refresh.service" for details.
+
+Service restarts being deferred:
+ systemctl restart ModemManager.service
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: apt[2378], sshd[1070]
+ asvpg @ user manager service: systemd[1080]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following NEW packages will be installed:
+  postgresql-client-common
+0 upgraded, 1 newly installed, 0 to remove and 1 not upgraded.
+Need to get 36.4 kB of archives.
+After this operation, 134 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client-common all 257build1.1 [36.4 kB]
+Fetched 36.4 kB in 0s (507 kB/s)
+Selecting previously unselected package postgresql-client-common.
+(Reading database ... 106723 files and directories currently installed.)
+Preparing to unpack .../postgresql-client-common_257build1.1_all.deb ...
+Unpacking postgresql-client-common (257build1.1) ...
+Setting up postgresql-client-common (257build1.1) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1070]
+ asvpg @ user manager service: systemd[1080]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+The following additional packages will be installed:
+  libpq5 postgresql-client-16
+Suggested packages:
+  postgresql-16 postgresql-doc-16
+The following NEW packages will be installed:
+  libpq5 postgresql-client postgresql-client-16
+0 upgraded, 3 newly installed, 0 to remove and 1 not upgraded.
+Need to get 1458 kB of archives.
+After this operation, 4830 kB of additional disk space will be used.
+Get:1 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 libpq5 amd64 16.14-0ubuntu0.24.04.1 [147 kB]
+Get:2 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client-16 amd64 16.14-0ubuntu0.24.04.1 [1300 kB]
+Get:3 http://mirror.yandex.ru/ubuntu noble-updates/main amd64 postgresql-client all 16+257build1.1 [11.6 kB]
+Fetched 1458 kB in 0s (24.6 MB/s)
+Selecting previously unselected package libpq5:amd64.
+(Reading database ... 106759 files and directories currently installed.)
+Preparing to unpack .../libpq5_16.14-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking libpq5:amd64 (16.14-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql-client-16.
+Preparing to unpack .../postgresql-client-16_16.14-0ubuntu0.24.04.1_amd64.deb ...
+Unpacking postgresql-client-16 (16.14-0ubuntu0.24.04.1) ...
+Selecting previously unselected package postgresql-client.
+Preparing to unpack .../postgresql-client_16+257build1.1_all.deb ...
+Unpacking postgresql-client (16+257build1.1) ...
+Setting up libpq5:amd64 (16.14-0ubuntu0.24.04.1) ...
+Setting up postgresql-client-16 (16.14-0ubuntu0.24.04.1) ...
+update-alternatives: using /usr/share/postgresql/16/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode
+Setting up postgresql-client (16+257build1.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.8) ...
+Scanning processes...
+Scanning candidates...
+Scanning linux images...
+
+Running kernel seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ asvpg @ session #1: sshd[1070]
+ asvpg @ user manager service: systemd[1080]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+asvpg@vm-haproxy2:~$
+
+asvpg@vm-haproxy2:~$ psql -p 6432 -d thai -h 10.130.0.33 -U postgres
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+```
+
+####
+Далее настраиваем конфиг HAProxy. В нем прописываем частоту опросов на роль ноды, выполняем проверку портов (6432 - для данных; 8008 - для ответов).
+Проверяем 3 сервера на мастер и 3 сервера на реплику. Как только роль ноды меняется, HAProxy автоматически это проверяет и перенаправляет новые соединения с учетом смены роли. При этом старые соединения будут оставаться на старой ноде и поэтому приложение должно ретраить запросы при разрыве соединения.
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo bash
+root@haproxynode:/home/asvpg# cd /etc/haproxy/
+root@haproxynode:/etc/haproxy# ls -altr
+total 16
+-rw-r--r--   1 root root 1285 Dec  3  2025 haproxy.cfg
+drwxr-xr-x   2 root root 4096 Aug 16 09:56 errors
+drwxr-xr-x 108 root root 4096 Aug 16 10:11 ..
+drwxr-xr-x   3 root root 4096 Aug 16 10:19 .
+root@haproxynode:/etc/haproxy# cp haproxy.cfg haproxy.cfg.default
+root@haproxynode:/etc/haproxy# rm haproxy.cfg
+root@haproxynode:/etc/haproxy# touch haproxy.cfg
+root@haproxynode:/etc/haproxy# ls -altr
+total 16
+drwxr-xr-x   2 root root 4096 Aug 16 09:56 errors
+drwxr-xr-x 108 root root 4096 Aug 16 10:11 ..
+-rw-r--r--   1 root root 1285 Aug 16 10:20 haproxy.cfg.default
+-rw-r--r--   1 root root    0 Aug 16 10:20 haproxy.cfg
+drwxr-xr-x   3 root root 4096 Aug 16 10:20 .
+root@haproxynode:/etc/haproxy# nano haproxy.cfg
+root@haproxynode:/etc/haproxy# cat haproxy.cfg
+listen postgres_write
+    bind *:5432
+    mode            tcp
+    option httpchk
+    http-check connect
+    http-check send meth GET uri /master
+    http-check expect status 200
+    default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
+    server pgsql1 10.130.0.13:6432 check port 8008
+    server pgsql2 10.130.0.28:6432 check port 8008
+    server pgsql3 10.130.0.33:6432 check port 8008
+
+listen postgres_read
+    bind *:5433
+    mode            tcp
+    http-check connect
+    http-check send meth GET uri /replica
+    http-check expect status 200
+    default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
+    server pgsql1 10.130.0.13:6432 check port 8008
+    server pgsql2 10.130.0.28:6432 check port 8008
+    server pgsql3 10.130.0.33:6432 check port 8008
+root@haproxynode:/etc/haproxy#
+
+asvpg@vm-haproxy2:~$ sudo  bash
+root@haproxynode:/home/asvpg# cd /etc/haproxy/
+root@haproxynode:/etc/haproxy# ls -altr
+total 16
+-rw-r--r--   1 root root 1285 Dec  3  2025 haproxy.cfg
+drwxr-xr-x   2 root root 4096 Aug 16 09:58 errors
+drwxr-xr-x   3 root root 4096 Aug 16 09:58 .
+drwxr-xr-x 108 root root 4096 Aug 16 10:12 ..
+root@haproxynode:/etc/haproxy# cp haproxy.cfg haproxy.cfg.default
+root@haproxynode:/etc/haproxy# rm haproxy.cfg
+root@haproxynode:/etc/haproxy# touch haproxy.cfg
+root@haproxynode:/etc/haproxy# nano haproxy.cfg
+root@haproxynode:/etc/haproxy# cat haproxy.cfg
+listen postgres_write
+    bind *:5432
+    mode            tcp
+    option httpchk
+    http-check connect
+    http-check send meth GET uri /master
+    http-check expect status 200
+    default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
+    server pgsql1 10.130.0.13:6432 check port 8008
+    server pgsql2 10.130.0.28:6432 check port 8008
+    server pgsql3 10.130.0.33:6432 check port 8008
+
+listen postgres_read
+    bind *:5433
+    mode            tcp
+    http-check connect
+    http-check send meth GET uri /replica
+    http-check expect status 200
+    default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
+    server pgsql1 10.130.0.13:6432 check port 8008
+    server pgsql2 10.130.0.28:6432 check port 8008
+    server pgsql3 10.130.0.33:6432 check port 8008
+root@haproxynode:/etc/haproxy#
+```
+
+####
+Выполняем рестарт налету. HAProxy и pgbouncer в целом предназначены для частой смены конфигов, поэтому можно делать без предварительного останова сервиса, в отличие от etcd
+####
+```sh
+asvpg@vm-haproxy1:~$ sudo systemctl restart haproxy.service
+asvpg@vm-haproxy1:~$
+asvpg@vm-haproxy1:~$ sudo systemctl status haproxy.service
+● haproxy.service - HAProxy Load Balancer
+     Loaded: loaded (/usr/lib/systemd/system/haproxy.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 10:26:37 UTC; 18s ago
+       Docs: man:haproxy(1)
+             file:/usr/share/doc/haproxy/configuration.txt.gz
+   Main PID: 7752 (haproxy)
+     Status: "Ready."
+      Tasks: 3 (limit: 2313)
+     Memory: 39.1M (peak: 39.6M)
+        CPU: 114ms
+     CGroup: /system.slice/haproxy.service
+             ├─7752 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             └─7756 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+
+Aug 16 10:26:37 haproxynode haproxy[7752]: [WARNING]  (7752) : config : proxy 'postgres_read' uses http-check rules without 'option >
+Aug 16 10:26:37 haproxynode haproxy[7752]: [WARNING]  (7752) : config : missing timeouts for proxy 'postgres_read'.
+Aug 16 10:26:37 haproxynode haproxy[7752]:    | While not properly invalid, you will certainly encounter various problems
+Aug 16 10:26:37 haproxynode haproxy[7752]:    | with such a configuration. To fix this, please ensure that all following
+Aug 16 10:26:37 haproxynode haproxy[7752]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
+Aug 16 10:26:37 haproxynode haproxy[7752]: [NOTICE]   (7752) : New worker (7756) forked
+Aug 16 10:26:37 haproxynode haproxy[7752]: [NOTICE]   (7752) : Loading success.
+Aug 16 10:26:37 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
+Aug 16 10:26:37 haproxynode haproxy[7756]: [WARNING]  (7756) : Server postgres_write/pgsql1 is DOWN, reason: Layer7 wrong status, co>
+Aug 16 10:26:38 haproxynode haproxy[7756]: [WARNING]  (7756) : Server postgres_write/pgsql2 is DOWN, reason: Layer7 wrong status, co>
+asvpg@vm-haproxy1:~$
+
+asvpg@vm-haproxy2:~$ sudo systemctl restart haproxy.service
+asvpg@vm-haproxy2:~$
+asvpg@vm-haproxy2:~$ sudo systemctl status haproxy.service
+● haproxy.service - HAProxy Load Balancer
+     Loaded: loaded (/usr/lib/systemd/system/haproxy.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-08-16 10:26:42 UTC; 28s ago
+       Docs: man:haproxy(1)
+             file:/usr/share/doc/haproxy/configuration.txt.gz
+   Main PID: 7747 (haproxy)
+     Status: "Ready."
+      Tasks: 3 (limit: 2313)
+     Memory: 39.1M (peak: 39.6M)
+        CPU: 147ms
+     CGroup: /system.slice/haproxy.service
+             ├─7747 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             └─7751 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+
+Aug 16 10:26:42 haproxynode haproxy[7747]: [WARNING]  (7747) : config : proxy 'postgres_read' uses http-check rules wit>
+Aug 16 10:26:42 haproxynode haproxy[7747]: [WARNING]  (7747) : config : missing timeouts for proxy 'postgres_read'.
+Aug 16 10:26:42 haproxynode haproxy[7747]:    | While not properly invalid, you will certainly encounter various proble>
+Aug 16 10:26:42 haproxynode haproxy[7747]:    | with such a configuration. To fix this, please ensure that all following
+Aug 16 10:26:42 haproxynode haproxy[7747]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
+Aug 16 10:26:42 haproxynode haproxy[7747]: [NOTICE]   (7747) : New worker (7751) forked
+Aug 16 10:26:42 haproxynode haproxy[7747]: [NOTICE]   (7747) : Loading success.
+Aug 16 10:26:42 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
+Aug 16 10:26:43 haproxynode haproxy[7751]: [WARNING]  (7751) : Server postgres_write/pgsql1 is DOWN, reason: Layer7 wro>
+Aug 16 10:26:44 haproxynode haproxy[7751]: [WARNING]  (7751) : Server postgres_write/pgsql2 is DOWN, reason: Layer7 wro>
+asvpg@vm-haproxy2:~$
+
+--WARNING для нод pgsql1 и pgsql2 логичны, т.к. это реплики.
+```
+
+####
+Проверим подключение через прокси. Указываем порт 5432, а прокси уже перенаправляет подключение через 6432 
+####
+```sh
+asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5432
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+
+asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5432
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+
+--Мы попадаем на мастер
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
+```
+
+####
+Выполним переключение ролей и проверим, что будет с открытой сессией через прокси к БД
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 11 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml switchover
+Current cluster topology
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 11 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+Primary [vm-pg3]:
+Candidate ['vm-pg1', 'vm-pg2'] []: vm-pg1
+When should the switchover take place (e.g. 2026-08-16T11:39 )  [now]:
+Are you sure you want to switchover cluster patroni, demoting current leader vm-pg3? [y/N]: y
+2026-08-16 10:40:03.76910 Successfully switched over to "vm-pg1"
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running | 11 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | running | 11 |  0/2600D330 |   0 | 0/2600D330 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | stopped |    |     unknown |     |    unknown |     |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   | 12 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 12 |  0/2600E028 |   0 | 0/2600E028 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 12 |  0/2600E028 |   0 | 0/2600E028 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+--смотрим сессии на 2 нодах HAProxy и видим, что при попытке выполнить новый запрос вызывается переподключение
+thai=# select 1;
+FATAL:  terminating connection due to administrator command
+FATAL:  server conn crashed?
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=# select pg_is_in_recovery();
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=#
+thai=#
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
+
+
+thai=# select 1;
+FATAL:  terminating connection due to administrator command
+FATAL:  server conn crashed?
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=# select 1;
+ ?column?
+----------
+        1
+(1 row)
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
+```
+
+###
+Настройка keepalived на нодах с HAProxy
+###
+
+####
+####
+```sh
+```
