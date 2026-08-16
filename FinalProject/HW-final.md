@@ -1,14 +1,31 @@
+###
+OTUS – PostgreSQL для администраторов баз данных и разработчиков
 
+Проектная работа по теме
+###
+
+##
+Создание и тестирование высоконагруженного отказоустойчивого кластера PostgreSQL на базе Patroni
+##
+
+####
+Содержимое
+
+1. Настройка кластера ETCD
+2. Настройка кластера PostgreSQL
+3. Настройка кластера Patroni
+4. Настройка pgbouncer
+5. Настройка HAProxy
+6. Настройка keepalived на нодах с HAProxy
+7. Тестирование
+####
 
 ###
 1. Настройка кластера ETCD
 ###
 ###
 
-Intel
-2 vCPU
-2 ГБ RAM
-###
+
 
 <img width="1728" height="972" alt="pr1_deploy" src="https://github.com/user-attachments/assets/dd2d3840-e80a-454e-b260-e089804d2225" />
 
@@ -6513,4 +6530,530 @@ asvpg@vm-haproxy2:~$
 
 --2 ВМ не видят пакеты VRRP - и это как я считаю, главная причина split brain.
 В интерфейсе Яндекс Облака добавлял правила на открытие входящего и исходящего трафика, но не помогло. Может быть ошибся в настройке.
+```
+
+###
+Тестирование
+###
+
+####
+Выполнение switchover
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   | 12 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 12 |  0/2600FEA0 |   0 | 0/2600FEA0 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 12 |  0/2600FEA0 |   0 | 0/2600FEA0 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml switchover
+Current cluster topology
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   | 12 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 12 |  0/2600FEA0 |   0 | 0/2600FEA0 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 12 |  0/2600FEA0 |   0 | 0/2600FEA0 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+Primary [vm-pg1]:
+Candidate ['vm-pg2', 'vm-pg3'] []: vm-pg2
+When should the switchover take place (e.g. 2026-08-16T19:05 )  [now]:
+Are you sure you want to switchover cluster patroni, demoting current leader vm-pg1? [y/N]: y
+2026-08-16 18:05:20.61880 Successfully switched over to "vm-pg2"
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | stopped |    |     unknown |     |    unknown |     |
+| vm-pg2 | 10.130.0.28 | Leader  | running | 12 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | running | 12 |  0/2600FFE8 |   0 | 0/2600FFE8 |   0 |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 13 |  0/26010140 |   0 | 0/26010140 |   0 |
+| vm-pg2 | 10.130.0.28 | Leader  | running   | 13 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 13 |  0/26010140 |   0 | 0/26010140 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg1:~$ sudo journalctl -u patroni.service -n 40 -f
+Aug 16 18:05:22 vm-pg1 patroni[775]: 10        0/26000990        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 11        0/2600D330        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 12        0/2600FFE8        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,016 INFO: closed patroni connections to postgres
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,367 INFO: postmaster pid=5720
+Aug 16 18:05:22 vm-pg1 patroni[5720]: 2026-08-16 18:05:22.373 UTC [5720] LOG:  starting PostgreSQL 17.11 (Ubuntu 17.11-1.pgdg24.04+2) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit
+Aug 16 18:05:22 vm-pg1 patroni[5720]: 2026-08-16 18:05:22.373 UTC [5720] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+Aug 16 18:05:22 vm-pg1 patroni[5720]: 2026-08-16 18:05:22.377 UTC [5720] LOG:  listening on IPv4 address "10.130.0.13", port 5432
+Aug 16 18:05:22 vm-pg1 patroni[5720]: 2026-08-16 18:05:22.383 UTC [5720] LOG:  listening on Unix socket "./.s.PGSQL.5432"
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.395 UTC [5725] LOG:  database system was shut down at 2026-08-16 18:05:18 UTC
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.395 UTC [5725] LOG:  entering standby mode
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.403 UTC [5725] LOG:  consistent recovery state reached at 0/2600FFE8
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.403 UTC [5725] LOG:  invalid record length at 0/2600FFE8: expected at least 24, got 0
+Aug 16 18:05:22 vm-pg1 patroni[5720]: 2026-08-16 18:05:22.403 UTC [5720] LOG:  database system is ready to accept read-only connections
+Aug 16 18:05:22 vm-pg1 patroni[5726]: 2026-08-16 18:05:22.404 UTC [5726] postgres@postgres FATAL:  the database system is starting up
+Aug 16 18:05:22 vm-pg1 patroni[5721]: localhost:5432 - rejecting connections
+Aug 16 18:05:22 vm-pg1 patroni[5727]: localhost:5432 - accepting connections
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,425 INFO: Lock owner: vm-pg2; I am vm-pg1
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,425 INFO: establishing a new patroni heartbeat connection to postgres
+Aug 16 18:05:22 vm-pg1 patroni[5728]: 2026-08-16 18:05:22.427 UTC [5728] LOG:  fetching timeline history file for timeline 13 from primary server
+Aug 16 18:05:22 vm-pg1 patroni[5728]: 2026-08-16 18:05:22.435 UTC [5728] LOG:  started streaming WAL from primary at 0/26000000 on timeline 12
+Aug 16 18:05:22 vm-pg1 patroni[5728]: 2026-08-16 18:05:22.436 UTC [5728] LOG:  replication terminated by primary server
+Aug 16 18:05:22 vm-pg1 patroni[5728]: 2026-08-16 18:05:22.436 UTC [5728] DETAIL:  End of WAL reached on timeline 12 at 0/2600FFE8.
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.437 UTC [5725] LOG:  new target timeline is 13
+Aug 16 18:05:22 vm-pg1 patroni[5728]: 2026-08-16 18:05:22.437 UTC [5728] LOG:  restarted WAL streaming at 0/26000000 on timeline 13
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,479 INFO: Local timeline=12 lsn=0/2600FFE8
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,519 INFO: primary_timeline=13
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,520 INFO: primary: history=9        0/260007D8        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 10        0/26000990        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 11        0/2600D330        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[775]: 12        0/2600FFE8        no recovery target specified
+Aug 16 18:05:22 vm-pg1 patroni[5725]: 2026-08-16 18:05:22.559 UTC [5725] LOG:  redo starts at 0/2600FFE8
+Aug 16 18:05:22 vm-pg1 patroni[775]: 2026-08-16 18:05:22,633 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:25 vm-pg1 patroni[775]: 2026-08-16 18:05:25,184 INFO: establishing a new patroni restapi connection to postgres
+Aug 16 18:05:31 vm-pg1 patroni[775]: 2026-08-16 18:05:31,399 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:41 vm-pg1 patroni[775]: 2026-08-16 18:05:41,842 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:51 vm-pg1 patroni[775]: 2026-08-16 18:05:51,843 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:01 vm-pg1 patroni[775]: 2026-08-16 18:06:01,841 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:11 vm-pg1 patroni[775]: 2026-08-16 18:06:11,841 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:21 vm-pg1 patroni[775]: 2026-08-16 18:06:21,841 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:31 vm-pg1 patroni[775]: 2026-08-16 18:06:31,841 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+asvpg@vm-pg1:~$
+
+Aug 16 18:05:05 vm-pg2 patroni[775]: 2026-08-16 18:05:05,027 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 16 18:05:15 vm-pg2 patroni[775]: 2026-08-16 18:05:15,027 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 16 18:05:19 vm-pg2 patroni[775]: 2026-08-16 18:05:19,944 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg1)
+Aug 16 18:05:20 vm-pg2 patroni[775]: 2026-08-16 18:05:20,055 INFO: Cleaning up failover key after acquiring leader lock...
+Aug 16 18:05:20 vm-pg2 patroni[775]: 2026-08-16 18:05:20,169 INFO: promoted self to leader by acquiring session lock
+Aug 16 18:05:20 vm-pg2 patroni[3521]: server promoting
+Aug 16 18:05:21 vm-pg2 patroni[775]: 2026-08-16 18:05:21,359 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:05:31 vm-pg2 patroni[775]: 2026-08-16 18:05:31,342 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:05:41 vm-pg2 patroni[775]: 2026-08-16 18:05:41,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:05:51 vm-pg2 patroni[775]: 2026-08-16 18:05:51,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:01 vm-pg2 patroni[775]: 2026-08-16 18:06:01,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:11 vm-pg2 patroni[775]: 2026-08-16 18:06:11,284 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:21 vm-pg2 patroni[775]: 2026-08-16 18:06:21,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:31 vm-pg2 patroni[775]: 2026-08-16 18:06:31,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:41 vm-pg2 patroni[775]: 2026-08-16 18:06:41,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:06:51 vm-pg2 patroni[775]: 2026-08-16 18:06:51,228 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:07:01 vm-pg2 patroni[775]: 2026-08-16 18:07:01,229 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:07:11 vm-pg2 patroni[775]: 2026-08-16 18:07:11,228 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:07:21 vm-pg2 patroni[775]: 2026-08-16 18:07:21,228 INFO: no action. I am (vm-pg2), the leader with the lock
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg3:~$ sudo journalctl -u patroni.service -n 40 -f
+Aug 16 18:05:22 vm-pg3 patroni[3075]: 2026-08-16 18:05:22.015 UTC [3075] LOG:  parameter "primary_conninfo" changed to "dbname=postgres user=repl_user passfile=/tmp/pgpass0 host=10.130.0.28 port=5432 sslmode=prefer application_name=vm-pg3 gssencmode=prefer channel_binding=prefer sslnegotiation=postgres"
+Aug 16 18:05:22 vm-pg3 patroni[5262]: 2026-08-16 18:05:22.035 UTC [5262] LOG:  fetching timeline history file for timeline 13 from primary server
+Aug 16 18:05:22 vm-pg3 patroni[5262]: 2026-08-16 18:05:22.042 UTC [5262] LOG:  started streaming WAL from primary at 0/26000000 on timeline 12
+Aug 16 18:05:22 vm-pg3 patroni[5262]: 2026-08-16 18:05:22.043 UTC [5262] LOG:  replication terminated by primary server
+Aug 16 18:05:22 vm-pg3 patroni[5262]: 2026-08-16 18:05:22.043 UTC [5262] DETAIL:  End of WAL reached on timeline 12 at 0/2600FFE8.
+Aug 16 18:05:22 vm-pg3 patroni[3079]: 2026-08-16 18:05:22.043 UTC [3079] LOG:  new target timeline is 13
+Aug 16 18:05:22 vm-pg3 patroni[5262]: 2026-08-16 18:05:22.044 UTC [5262] LOG:  restarted WAL streaming at 0/26000000 on timeline 13
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,088 INFO: following a different leader because i am not the healthiest node
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,089 INFO: Lock owner: vm-pg2; I am vm-pg3
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,101 INFO: Local timeline=12 lsn=0/2600FFE8
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,129 INFO: primary_timeline=13
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,129 INFO: primary: history=9        0/260007D8        no recovery target specified
+Aug 16 18:05:22 vm-pg3 patroni[777]: 10        0/26000990        no recovery target specified
+Aug 16 18:05:22 vm-pg3 patroni[777]: 11        0/2600D330        no recovery target specified
+Aug 16 18:05:22 vm-pg3 patroni[777]: 12        0/2600FFE8        no recovery target specified
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,154 INFO: Local timeline=13 lsn=0/2600FFE8
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,185 INFO: primary_timeline=13
+Aug 16 18:05:22 vm-pg3 patroni[777]: 2026-08-16 18:05:22,297 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:25 vm-pg3 patroni[3077]: 2026-08-16 18:05:25.020 UTC [3077] LOG:  restartpoint starting: time
+Aug 16 18:05:25 vm-pg3 patroni[3077]: 2026-08-16 18:05:25.041 UTC [3077] LOG:  restartpoint complete: wrote 0 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.001 s, sync=0.001 s, total=0.021 s; sync files=0, longest=0.000 s, average=0.000 s; distance=0 kB, estimate=9 kB; lsn=0/26010090, redo lsn=0/26010038
+Aug 16 18:05:25 vm-pg3 patroni[3077]: 2026-08-16 18:05:25.041 UTC [3077] LOG:  recovery restart point at 0/26010038
+Aug 16 18:05:31 vm-pg3 patroni[777]: 2026-08-16 18:05:31,404 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:41 vm-pg3 patroni[777]: 2026-08-16 18:05:41,840 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:05:51 vm-pg3 patroni[777]: 2026-08-16 18:05:51,840 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:01 vm-pg3 patroni[777]: 2026-08-16 18:06:01,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:11 vm-pg3 patroni[777]: 2026-08-16 18:06:11,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:21 vm-pg3 patroni[777]: 2026-08-16 18:06:21,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:31 vm-pg3 patroni[777]: 2026-08-16 18:06:31,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:41 vm-pg3 patroni[777]: 2026-08-16 18:06:41,843 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:06:51 vm-pg3 patroni[777]: 2026-08-16 18:06:51,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:01 vm-pg3 patroni[777]: 2026-08-16 18:07:01,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:11 vm-pg3 patroni[777]: 2026-08-16 18:07:11,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:21 vm-pg3 patroni[777]: 2026-08-16 18:07:21,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:31 vm-pg3 patroni[777]: 2026-08-16 18:07:31,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:41 vm-pg3 patroni[777]: 2026-08-16 18:07:41,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:07:51 vm-pg3 patroni[777]: 2026-08-16 18:07:51,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:01 vm-pg3 patroni[777]: 2026-08-16 18:08:01,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:11 vm-pg3 patroni[777]: 2026-08-16 18:08:11,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:21 vm-pg3 patroni[777]: 2026-08-16 18:08:21,895 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:31 vm-pg3 patroni[777]: 2026-08-16 18:08:31,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:41 vm-pg3 patroni[777]: 2026-08-16 18:08:41,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+asvpg@vm-pg3:~$
+```
+
+####
+Выполнение failover
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 13 |  0/26010140 |   0 | 0/26010140 |   0 |
+| vm-pg2 | 10.130.0.28 | Leader  | running   | 13 |             |     |            |     |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 13 |  0/26010140 |   0 | 0/26010140 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+
+asvpg@vm-pg2:~$ sudo systemctl stop patroni
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 14 |  0/260102F8 |   0 | 0/260102F8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | stopped   |    |     unknown |     |    unknown |     |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 14 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+asvpg@vm-pg3:~$ sudo journalctl -u patroni.service -n 40 -f
+Aug 16 18:08:21 vm-pg3 patroni[777]: 2026-08-16 18:08:21,895 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:31 vm-pg3 patroni[777]: 2026-08-16 18:08:31,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:41 vm-pg3 patroni[777]: 2026-08-16 18:08:41,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:08:51 vm-pg3 patroni[777]: 2026-08-16 18:08:51,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:01 vm-pg3 patroni[777]: 2026-08-16 18:09:01,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:11 vm-pg3 patroni[777]: 2026-08-16 18:09:11,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:21 vm-pg3 patroni[777]: 2026-08-16 18:09:21,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:31 vm-pg3 patroni[777]: 2026-08-16 18:09:31,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:41 vm-pg3 patroni[777]: 2026-08-16 18:09:41,842 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:09:51 vm-pg3 patroni[777]: 2026-08-16 18:09:51,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:01 vm-pg3 patroni[777]: 2026-08-16 18:10:01,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:11 vm-pg3 patroni[777]: 2026-08-16 18:10:11,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:21 vm-pg3 patroni[777]: 2026-08-16 18:10:21,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:31 vm-pg3 patroni[777]: 2026-08-16 18:10:31,841 INFO: no action. I am (vm-pg3), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:36 vm-pg3 patroni[5262]: 2026-08-16 18:10:36.395 UTC [5262] LOG:  replication terminated by primary server
+Aug 16 18:10:36 vm-pg3 patroni[5262]: 2026-08-16 18:10:36.395 UTC [5262] DETAIL:  End of WAL reached on timeline 13 at 0/260101B8.
+Aug 16 18:10:36 vm-pg3 patroni[5262]: 2026-08-16 18:10:36.395 UTC [5262] FATAL:  could not send end-of-streaming message to primary: SSL connection has been closed unexpectedly
+Aug 16 18:10:36 vm-pg3 patroni[5262]:         no COPY in progress
+Aug 16 18:10:36 vm-pg3 patroni[3079]: 2026-08-16 18:10:36.396 UTC [3079] LOG:  invalid record length at 0/260101B8: expected at least 24, got 0
+Aug 16 18:10:36 vm-pg3 patroni[5317]: 2026-08-16 18:10:36.399 UTC [5317] FATAL:  could not connect to the primary server: connection to server at "10.130.0.28", port 5432 failed: Connection refused
+Aug 16 18:10:36 vm-pg3 patroni[5317]:                 Is the server running on that host and accepting TCP/IP connections?
+Aug 16 18:10:36 vm-pg3 patroni[3079]: 2026-08-16 18:10:36.399 UTC [3079] LOG:  waiting for WAL to become available at 0/260101D0
+Aug 16 18:10:37 vm-pg3 patroni[777]: 2026-08-16 18:10:37,424 INFO: Got response from vm-pg1 http://10.130.0.13:8008/patroni: {"state": "running", "postmaster_start_time": "2026-08-16 18:05:22.387526+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637600184, "replayed_location": 637600184, "replayed_timestamp": null, "paused": false}, "timeline": 13, "cluster_unlocked": true, "dcs_last_seen": 1786903837, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg1"}}
+Aug 16 18:10:37 vm-pg3 patroni[777]: 2026-08-16 18:10:37,527 WARNING: Request failed to vm-pg2: GET http://10.130.0.28:8008/patroni (HTTPConnectionPool(host='10.130.0.28', port=8008): Max retries exceeded with url: /patroni (Caused by ProtocolError('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))))
+Aug 16 18:10:37 vm-pg3 patroni[777]: 2026-08-16 18:10:37,695 INFO: promoted self to leader by acquiring session lock
+Aug 16 18:10:37 vm-pg3 patroni[5320]: server promoting
+Aug 16 18:10:37 vm-pg3 patroni[3079]: 2026-08-16 18:10:37.697 UTC [3079] LOG:  received promote request
+Aug 16 18:10:37 vm-pg3 patroni[3079]: 2026-08-16 18:10:37.697 UTC [3079] LOG:  redo done at 0/26010140 system usage: CPU: user: 0.00 s, system: 0.13 s, elapsed: 27031.96 s
+Aug 16 18:10:37 vm-pg3 patroni[3079]: 2026-08-16 18:10:37.714 UTC [3079] LOG:  selected new timeline ID: 14
+Aug 16 18:10:37 vm-pg3 patroni[777]: 2026-08-16 18:10:37,696 INFO: Lock owner: vm-pg3; I am vm-pg3
+Aug 16 18:10:37 vm-pg3 patroni[777]: 2026-08-16 18:10:37,809 INFO: updated leader lock during promote
+Aug 16 18:10:37 vm-pg3 patroni[3079]: 2026-08-16 18:10:37.838 UTC [3079] LOG:  archive recovery complete
+Aug 16 18:10:37 vm-pg3 patroni[3077]: 2026-08-16 18:10:37.858 UTC [3077] LOG:  checkpoint starting: force
+Aug 16 18:10:37 vm-pg3 patroni[3075]: 2026-08-16 18:10:37.861 UTC [3075] LOG:  database system is ready to accept connections
+Aug 16 18:10:37 vm-pg3 patroni[3077]: 2026-08-16 18:10:37.925 UTC [3077] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.008 s, sync=0.002 s, total=0.068 s; sync files=2, longest=0.002 s, average=0.001 s; distance=0 kB, estimate=8 kB; lsn=0/26010248, redo lsn=0/260101F0
+Aug 16 18:10:38 vm-pg3 patroni[777]: 2026-08-16 18:10:38,893 INFO: no action. I am (vm-pg3), the leader with the lock
+Aug 16 18:10:48 vm-pg3 patroni[777]: 2026-08-16 18:10:48,757 INFO: no action. I am (vm-pg3), the leader with the lock
+Aug 16 18:10:58 vm-pg3 patroni[777]: 2026-08-16 18:10:58,757 INFO: no action. I am (vm-pg3), the leader with the lock
+Aug 16 18:11:08 vm-pg3 patroni[777]: 2026-08-16 18:11:08,757 INFO: no action. I am (vm-pg3), the leader with the lock
+Aug 16 18:11:18 vm-pg3 patroni[777]: 2026-08-16 18:11:18,757 INFO: no action. I am (vm-pg3), the leader with the lock
+asvpg@vm-pg3:~$
+
+asvpg@vm-pg1:~$ sudo journalctl -u patroni.service -n 40 -f
+Aug 16 18:10:22 vm-pg1 patroni[5723]: 2026-08-16 18:10:22.485 UTC [5723] LOG:  recovery restart point at 0/26010038
+Aug 16 18:10:31 vm-pg1 patroni[775]: 2026-08-16 18:10:31,841 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg2)
+Aug 16 18:10:36 vm-pg1 patroni[5728]: 2026-08-16 18:10:36.395 UTC [5728] LOG:  replication terminated by primary server
+Aug 16 18:10:36 vm-pg1 patroni[5728]: 2026-08-16 18:10:36.395 UTC [5728] DETAIL:  End of WAL reached on timeline 13 at 0/260101B8.
+Aug 16 18:10:36 vm-pg1 patroni[5728]: 2026-08-16 18:10:36.395 UTC [5728] FATAL:  could not send end-of-streaming message to primary: SSL connection has been closed unexpectedly
+Aug 16 18:10:36 vm-pg1 patroni[5728]:         no COPY in progress
+Aug 16 18:10:36 vm-pg1 patroni[5725]: 2026-08-16 18:10:36.396 UTC [5725] LOG:  invalid record length at 0/260101B8: expected at least 24, got 0
+Aug 16 18:10:36 vm-pg1 patroni[5767]: 2026-08-16 18:10:36.400 UTC [5767] FATAL:  could not connect to the primary server: connection to server at "10.130.0.28", port 5432 failed: Connection refused
+Aug 16 18:10:36 vm-pg1 patroni[5767]:                 Is the server running on that host and accepting TCP/IP connections?
+Aug 16 18:10:36 vm-pg1 patroni[5725]: 2026-08-16 18:10:36.400 UTC [5725] LOG:  waiting for WAL to become available at 0/260101D0
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,423 INFO: Got response from vm-pg3 http://10.130.0.33:8008/patroni: {"state": "running", "postmaster_start_time": "2026-08-16 10:40:05.585274+00:00", "role": "replica", "server_version": 170011, "xlog": {"received_location": 637600184, "replayed_location": 637600184, "replayed_timestamp": null, "paused": false}, "timeline": 13, "cluster_unlocked": true, "dcs_last_seen": 1786903837, "database_system_identifier": "7673599298398442043", "patroni": {"version": "4.1.5", "scope": "patroni", "name": "vm-pg3"}}
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,527 WARNING: Request failed to vm-pg2: GET http://10.130.0.28:8008/patroni (HTTPConnectionPool(host='10.130.0.28', port=8008): Max retries exceeded with url: /patroni (Caused by ProtocolError('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))))
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,638 INFO: Could not take out TTL lock
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,639 ERROR: watchprefix failed: ProtocolError("Connection broken: InvalidChunkLength(got length b'', 0 bytes read)", InvalidChunkLength(got length b'', 0 bytes read))
+Aug 16 18:10:37 vm-pg1 patroni[5769]: server signaled
+Aug 16 18:10:37 vm-pg1 patroni[5720]: 2026-08-16 18:10:37.642 UTC [5720] LOG:  received SIGHUP, reloading configuration files
+Aug 16 18:10:37 vm-pg1 patroni[5720]: 2026-08-16 18:10:37.643 UTC [5720] LOG:  parameter "primary_conninfo" changed to "dbname=postgres user=repl_user passfile=/tmp/pgpass0 host=10.130.0.33 port=5432 sslmode=prefer application_name=vm-pg1 gssencmode=prefer channel_binding=prefer sslnegotiation=postgres"
+Aug 16 18:10:37 vm-pg1 patroni[5771]: 2026-08-16 18:10:37.662 UTC [5771] LOG:  started streaming WAL from primary at 0/26000000 on timeline 13
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,709 INFO: following new leader after trying and failing to obtain lock
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,710 INFO: Lock owner: vm-pg3; I am vm-pg1
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,725 INFO: Local timeline=13 lsn=0/260101B8
+Aug 16 18:10:37 vm-pg1 patroni[775]: 2026-08-16 18:10:37,844 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:10:37 vm-pg1 patroni[5771]: 2026-08-16 18:10:37.857 UTC [5771] LOG:  replication terminated by primary server
+Aug 16 18:10:37 vm-pg1 patroni[5771]: 2026-08-16 18:10:37.857 UTC [5771] DETAIL:  End of WAL reached on timeline 13 at 0/260101B8.
+Aug 16 18:10:37 vm-pg1 patroni[5771]: 2026-08-16 18:10:37.858 UTC [5771] LOG:  fetching timeline history file for timeline 14 from primary server
+Aug 16 18:10:37 vm-pg1 patroni[5725]: 2026-08-16 18:10:37.866 UTC [5725] LOG:  new target timeline is 14
+Aug 16 18:10:37 vm-pg1 patroni[5771]: 2026-08-16 18:10:37.867 UTC [5771] LOG:  restarted WAL streaming at 0/26000000 on timeline 14
+Aug 16 18:10:38 vm-pg1 patroni[775]: 2026-08-16 18:10:38,813 INFO: Lock owner: vm-pg3; I am vm-pg1
+Aug 16 18:10:38 vm-pg1 patroni[775]: 2026-08-16 18:10:38,834 INFO: Local timeline=14 lsn=0/260102F8
+Aug 16 18:10:38 vm-pg1 patroni[775]: 2026-08-16 18:10:38,946 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:10:49 vm-pg1 patroni[775]: 2026-08-16 18:10:49,313 INFO: Lock owner: vm-pg3; I am vm-pg1
+Aug 16 18:10:49 vm-pg1 patroni[775]: 2026-08-16 18:10:49,326 INFO: Local timeline=14 lsn=0/260102F8
+Aug 16 18:10:49 vm-pg1 patroni[775]: 2026-08-16 18:10:49,359 INFO: primary_timeline=14
+Aug 16 18:10:49 vm-pg1 patroni[775]: 2026-08-16 18:10:49,415 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:10:59 vm-pg1 patroni[775]: 2026-08-16 18:10:59,369 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:11:09 vm-pg1 patroni[775]: 2026-08-16 18:11:09,369 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:11:19 vm-pg1 patroni[775]: 2026-08-16 18:11:19,370 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:11:29 vm-pg1 patroni[775]: 2026-08-16 18:11:29,370 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:11:39 vm-pg1 patroni[775]: 2026-08-16 18:11:39,369 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+Aug 16 18:11:49 vm-pg1 patroni[775]: 2026-08-16 18:11:49,368 INFO: no action. I am (vm-pg1), a secondary, and following a leader (vm-pg3)
+asvpg@vm-pg1:~$
+
+Aug 16 18:10:21 vm-pg2 patroni[775]: 2026-08-16 18:10:21,228 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:10:31 vm-pg2 patroni[775]: 2026-08-16 18:10:31,228 INFO: no action. I am (vm-pg2), the leader with the lock
+Aug 16 18:10:36 vm-pg2 systemd[1]: Stopping patroni.service - Runners to orchestrate a high-availability PostgreSQL...
+Aug 16 18:10:37 vm-pg2 systemd[1]: patroni.service: Deactivated successfully.
+Aug 16 18:10:37 vm-pg2 systemd[1]: Stopped patroni.service - Runners to orchestrate a high-availability PostgreSQL.
+Aug 16 18:10:37 vm-pg2 systemd[1]: patroni.service: Consumed 20.011s CPU time, 42.6M memory peak, 0B memory swap peak.
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg2:~$ sudo systemctl start patroni
+asvpg@vm-pg2:~$
+asvpg@vm-pg2:~$ sudo journalctl -u patroni.service -n 40 -f
+Aug 16 18:12:37 vm-pg2 patroni[3588]:   Data page checksum version: 0
+Aug 16 18:12:37 vm-pg2 patroni[3588]:   Mock authentication nonce: 64ff4c4c751a10f364360e73a19655d6dd41d667752e8e896f7f2c21a3a0f3da
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,279 INFO: Lock owner: vm-pg3; I am vm-pg2
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,285 INFO: Local timeline=13 lsn=0/26010140
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,315 INFO: primary_timeline=14
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,318 INFO: primary: history=10        0/26000990        no recovery target specified
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 11        0/2600D330        no recovery target specified
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 12        0/2600FFE8        no recovery target specified
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 13        0/260101B8        no recovery target specified
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,318 INFO: Lock owner: vm-pg3; I am vm-pg2
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,318 INFO: starting as a secondary
+Aug 16 18:12:37 vm-pg2 patroni[3617]: 2026-08-16 18:12:37.698 UTC [3617] LOG:  starting PostgreSQL 17.11 (Ubuntu 17.11-1.pgdg24.04+2) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit
+Aug 16 18:12:37 vm-pg2 patroni[3617]: 2026-08-16 18:12:37.698 UTC [3617] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+Aug 16 18:12:37 vm-pg2 patroni[3588]: 2026-08-16 18:12:37,699 INFO: postmaster pid=3617
+Aug 16 18:12:37 vm-pg2 patroni[3617]: 2026-08-16 18:12:37.703 UTC [3617] LOG:  listening on IPv4 address "10.130.0.28", port 5432
+Aug 16 18:12:37 vm-pg2 patroni[3617]: 2026-08-16 18:12:37.706 UTC [3617] LOG:  listening on Unix socket "./.s.PGSQL.5432"
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.721 UTC [3621] LOG:  database system was shut down at 2026-08-16 18:10:36 UTC
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.721 UTC [3621] LOG:  entering standby mode
+Aug 16 18:12:37 vm-pg2 patroni[3622]: 2026-08-16 18:12:37.728 UTC [3622] postgres@postgres FATAL:  the database system is starting up
+Aug 16 18:12:37 vm-pg2 patroni[3618]: localhost:5432 - rejecting connections
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.737 UTC [3621] LOG:  consistent recovery state reached at 0/260101B8
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.737 UTC [3621] LOG:  invalid record length at 0/260101B8: expected at least 24, got 0
+Aug 16 18:12:37 vm-pg2 patroni[3617]: 2026-08-16 18:12:37.737 UTC [3617] LOG:  database system is ready to accept read-only connections
+Aug 16 18:12:37 vm-pg2 patroni[3624]: 2026-08-16 18:12:37.739 UTC [3624] postgres@postgres FATAL:  the database system is starting up
+Aug 16 18:12:37 vm-pg2 patroni[3623]: localhost:5432 - rejecting connections
+Aug 16 18:12:37 vm-pg2 patroni[3625]: 2026-08-16 18:12:37.756 UTC [3625] LOG:  fetching timeline history file for timeline 14 from primary server
+Aug 16 18:12:37 vm-pg2 patroni[3625]: 2026-08-16 18:12:37.781 UTC [3625] LOG:  started streaming WAL from primary at 0/26000000 on timeline 13
+Aug 16 18:12:37 vm-pg2 patroni[3625]: 2026-08-16 18:12:37.782 UTC [3625] LOG:  replication terminated by primary server
+Aug 16 18:12:37 vm-pg2 patroni[3625]: 2026-08-16 18:12:37.782 UTC [3625] DETAIL:  End of WAL reached on timeline 13 at 0/260101B8.
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.783 UTC [3621] LOG:  new target timeline is 14
+Aug 16 18:12:37 vm-pg2 patroni[3625]: 2026-08-16 18:12:37.783 UTC [3625] LOG:  restarted WAL streaming at 0/26000000 on timeline 14
+Aug 16 18:12:37 vm-pg2 patroni[3621]: 2026-08-16 18:12:37.879 UTC [3621] LOG:  redo starts at 0/260101B8
+Aug 16 18:12:38 vm-pg2 patroni[3588]: 2026-08-16 18:12:38,625 INFO: establishing a new patroni heartbeat connection to postgres
+Aug 16 18:12:38 vm-pg2 patroni[3588]: 2026-08-16 18:12:38,641 INFO: establishing a new patroni restapi connection to postgres
+Aug 16 18:12:38 vm-pg2 patroni[3629]: localhost:5432 - accepting connections
+Aug 16 18:12:38 vm-pg2 patroni[3588]: 2026-08-16 18:12:38,869 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg3)
+Aug 16 18:12:38 vm-pg2 patroni[3588]: 2026-08-16 18:12:38,925 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg3)
+Aug 16 18:12:49 vm-pg2 patroni[3588]: 2026-08-16 18:12:49,426 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg3)
+Aug 16 18:12:59 vm-pg2 patroni[3588]: 2026-08-16 18:12:59,426 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg3)
+Aug 16 18:13:09 vm-pg2 patroni[3588]: 2026-08-16 18:13:09,426 INFO: no action. I am (vm-pg2), a secondary, and following a leader (vm-pg3)
+asvpg@vm-pg2:~$
+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 14 |  0/260102F8 |   0 | 0/260102F8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 14 |  0/260102F8 |   0 | 0/260102F8 |   0 |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 14 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+```
+
+###
+Подключение через pgbouncer
+###
+```sh
+asvpg@vm-pg3:~$ sudo -u postgres psql -p 6432 -d thai -h 10.130.0.33
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ t
+(1 row)
+
+thai=# \q
+asvpg@vm-pg3:~$ sudo -u postgres psql -p 6432 -d thai -h 10.130.0.13
+Password for user postgres:
+psql (17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+Type "help" for help.
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=# \q
+asvpg@vm-pg3:~$
+```
+
+###
+Проверим подключение через прокси. Указываем порт 5432, а прокси уже перенаправляет подключение через 6432 
+###
+```sh
+asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5432
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+
+asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5432
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# \dt+ book.*
+                                         List of relations
+ Schema |     Name     | Type  |  Owner   | Persistence | Access method |    Size    | Description
+--------+--------------+-------+----------+-------------+---------------+------------+-------------
+ book   | bus          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | busroute     | table | postgres | permanent   | heap          | 8192 bytes |
+ book   | busstation   | table | postgres | permanent   | heap          | 16 kB      |
+ book   | fam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | nam          | table | postgres | permanent   | heap          | 16 kB      |
+ book   | ride         | table | postgres | permanent   | heap          | 6432 kB    |
+ book   | schedule     | table | postgres | permanent   | heap          | 120 kB     |
+ book   | seat         | table | postgres | permanent   | heap          | 40 kB      |
+ book   | seatcategory | table | postgres | permanent   | heap          | 16 kB      |
+ book   | tickets      | table | postgres | permanent   | heap          | 461 MB     |
+(10 rows)
+
+thai=#
+
+--Мы попадаем на мастер
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
+```
+
+####
+Выполним переключение ролей и проверим, что будет с открытой сессией через прокси к БД
+####
+```sh
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 11 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml switchover
+Current cluster topology
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 11 |  0/2600D1E8 |   0 | 0/2600D1E8 |   0 |
+| vm-pg3 | 10.130.0.33 | Leader  | running   | 11 |             |     |            |     |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+Primary [vm-pg3]:
+Candidate ['vm-pg1', 'vm-pg2'] []: vm-pg1
+When should the switchover take place (e.g. 2026-08-16T11:39 )  [now]:
+Are you sure you want to switchover cluster patroni, demoting current leader vm-pg3? [y/N]: y
+2026-08-16 10:40:03.76910 Successfully switched over to "vm-pg1"
++ Cluster: patroni (7673599298398442043) --+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State   | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running | 11 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | running | 11 |  0/2600D330 |   0 | 0/2600D330 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | stopped |    |     unknown |     |    unknown |     |
++--------+-------------+---------+---------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$ sudo patronictl -c /etc/patroni/config.yml list
++ Cluster: patroni (7673599298398442043) ----+----+-------------+-----+------------+-----+
+| Member | Host        | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+| vm-pg1 | 10.130.0.13 | Leader  | running   | 12 |             |     |            |     |
+| vm-pg2 | 10.130.0.28 | Replica | streaming | 12 |  0/2600E028 |   0 | 0/2600E028 |   0 |
+| vm-pg3 | 10.130.0.33 | Replica | streaming | 12 |  0/2600E028 |   0 | 0/2600E028 |   0 |
++--------+-------------+---------+-----------+----+-------------+-----+------------+-----+
+asvpg@vm-pg1:~$
+
+--смотрим сессии на 2 нодах HAProxy и видим, что при попытке выполнить новый запрос вызывается переподключение
+thai=# select 1;
+FATAL:  terminating connection due to administrator command
+FATAL:  server conn crashed?
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=# select pg_is_in_recovery();
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=#
+thai=#
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
+
+
+thai=# select 1;
+FATAL:  terminating connection due to administrator command
+FATAL:  server conn crashed?
+server closed the connection unexpectedly
+        This probably means the server terminated abnormally
+        before or while processing the request.
+The connection to the server was lost. Attempting reset: Succeeded.
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+thai=# select 1;
+ ?column?
+----------
+        1
+(1 row)
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ f
+(1 row)
+
+thai=#
 ```
