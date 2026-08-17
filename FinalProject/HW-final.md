@@ -76,6 +76,15 @@ ntcn
 
 <img width="2311" height="972" alt="pr23_deploy" src="https://github.com/user-attachments/assets/98107d50-aaed-433a-af3e-3af0687468bc" />
 
+####
+Список нод кластера etcd
+####
+```sh
+vm-etcd1  10.129.0.23
+vm-etcd2  10.129.0.17
+vm-etcd3  10.129.0.11
+```
+
 ###
 Настройка etcd
 ###
@@ -5244,27 +5253,27 @@ drwxr-xr-x   3 root root 4096 Aug 16 10:20 .
 root@haproxynode:/etc/haproxy# nano haproxy.cfg
 root@haproxynode:/etc/haproxy# cat haproxy.cfg
 listen postgres_write
-    bind *:5432
+    bind *:5433
     mode            tcp
     option httpchk
     http-check connect
     http-check send meth GET uri /master
     http-check expect status 200
     default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
-    server pgsql1 10.130.0.13:6432 check port 8008
-    server pgsql2 10.130.0.28:6432 check port 8008
-    server pgsql3 10.130.0.33:6432 check port 8008
+    server vm-pg1 10.130.0.13:6432 check port 8008
+    server vm-pg2 10.130.0.28:6432 check port 8008
+    server vm-pg3 10.130.0.33:6432 check port 8008
 
 listen postgres_read
-    bind *:5433
+    bind *:5434
     mode            tcp
     http-check connect
     http-check send meth GET uri /replica
     http-check expect status 200
     default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
-    server pgsql1 10.130.0.13:6432 check port 8008
-    server pgsql2 10.130.0.28:6432 check port 8008
-    server pgsql3 10.130.0.33:6432 check port 8008
+    server vm-pg1 10.130.0.13:6432 check port 8008
+    server vm-pg2 10.130.0.28:6432 check port 8008
+    server vm-pg3 10.130.0.33:6432 check port 8008
 root@haproxynode:/etc/haproxy#
 
 asvpg@vm-haproxy2:~$ sudo  bash
@@ -5280,28 +5289,27 @@ root@haproxynode:/etc/haproxy# rm haproxy.cfg
 root@haproxynode:/etc/haproxy# touch haproxy.cfg
 root@haproxynode:/etc/haproxy# nano haproxy.cfg
 root@haproxynode:/etc/haproxy# cat haproxy.cfg
-listen postgres_write
-    bind *:5432
+ bind *:5433
     mode            tcp
     option httpchk
     http-check connect
     http-check send meth GET uri /master
     http-check expect status 200
     default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
-    server pgsql1 10.130.0.13:6432 check port 8008
-    server pgsql2 10.130.0.28:6432 check port 8008
-    server pgsql3 10.130.0.33:6432 check port 8008
+    server vm-pg1 10.130.0.13:6432 check port 8008
+    server vm-pg2 10.130.0.28:6432 check port 8008
+    server vm-pg3 10.130.0.33:6432 check port 8008
 
 listen postgres_read
-    bind *:5433
+    bind *:5434
     mode            tcp
     http-check connect
     http-check send meth GET uri /replica
     http-check expect status 200
     default-server inter 10s fall 3 rise 3 on-marked-down shutdown-sessions
-    server pgsql1 10.130.0.13:6432 check port 8008
-    server pgsql2 10.130.0.28:6432 check port 8008
-    server pgsql3 10.130.0.33:6432 check port 8008
+    server vm-pg1 10.130.0.13:6432 check port 8008
+    server vm-pg2 10.130.0.28:6432 check port 8008
+    server vm-pg3 10.130.0.33:6432 check port 8008
 root@haproxynode:/etc/haproxy#
 ```
 
@@ -5314,67 +5322,67 @@ asvpg@vm-haproxy1:~$
 asvpg@vm-haproxy1:~$ sudo systemctl status haproxy.service
 ● haproxy.service - HAProxy Load Balancer
      Loaded: loaded (/usr/lib/systemd/system/haproxy.service; enabled; preset: enabled)
-     Active: active (running) since Sun 2026-08-16 10:26:37 UTC; 18s ago
+     Active: active (running) since Mon 2026-08-17 16:10:19 UTC; 2min 30s ago
        Docs: man:haproxy(1)
              file:/usr/share/doc/haproxy/configuration.txt.gz
-   Main PID: 7752 (haproxy)
+   Main PID: 1455 (haproxy)
      Status: "Ready."
       Tasks: 3 (limit: 2313)
      Memory: 39.1M (peak: 39.6M)
-        CPU: 114ms
+        CPU: 124ms
      CGroup: /system.slice/haproxy.service
-             ├─7752 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
-             └─7756 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             ├─1455 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             └─1457 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
 
-Aug 16 10:26:37 haproxynode haproxy[7752]: [WARNING]  (7752) : config : proxy 'postgres_read' uses http-check rules without 'option >
-Aug 16 10:26:37 haproxynode haproxy[7752]: [WARNING]  (7752) : config : missing timeouts for proxy 'postgres_read'.
-Aug 16 10:26:37 haproxynode haproxy[7752]:    | While not properly invalid, you will certainly encounter various problems
-Aug 16 10:26:37 haproxynode haproxy[7752]:    | with such a configuration. To fix this, please ensure that all following
-Aug 16 10:26:37 haproxynode haproxy[7752]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
-Aug 16 10:26:37 haproxynode haproxy[7752]: [NOTICE]   (7752) : New worker (7756) forked
-Aug 16 10:26:37 haproxynode haproxy[7752]: [NOTICE]   (7752) : Loading success.
-Aug 16 10:26:37 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
-Aug 16 10:26:37 haproxynode haproxy[7756]: [WARNING]  (7756) : Server postgres_write/pgsql1 is DOWN, reason: Layer7 wrong status, co>
-Aug 16 10:26:38 haproxynode haproxy[7756]: [WARNING]  (7756) : Server postgres_write/pgsql2 is DOWN, reason: Layer7 wrong status, co>
+Aug 17 16:10:19 haproxynode haproxy[1455]: [WARNING]  (1455) : config : proxy 'postgres_read' uses http-check rules without 'option >
+Aug 17 16:10:19 haproxynode haproxy[1455]: [WARNING]  (1455) : config : missing timeouts for proxy 'postgres_read'.
+Aug 17 16:10:19 haproxynode haproxy[1455]:    | While not properly invalid, you will certainly encounter various problems
+Aug 17 16:10:19 haproxynode haproxy[1455]:    | with such a configuration. To fix this, please ensure that all following
+Aug 17 16:10:19 haproxynode haproxy[1455]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
+Aug 17 16:10:19 haproxynode haproxy[1455]: [NOTICE]   (1455) : New worker (1457) forked
+Aug 17 16:10:19 haproxynode haproxy[1455]: [NOTICE]   (1455) : Loading success.
+Aug 17 16:10:19 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
+Aug 17 16:10:21 haproxynode haproxy[1457]: [WARNING]  (1457) : Server postgres_write/vm-pg2 is DOWN, reason: Layer7 wrong status, co>
+Aug 17 16:10:22 haproxynode haproxy[1457]: [WARNING]  (1457) : Server postgres_write/vm-pg3 is DOWN, reason: Layer7 wrong status, co>
 asvpg@vm-haproxy1:~$
 
 asvpg@vm-haproxy2:~$ sudo systemctl restart haproxy.service
 asvpg@vm-haproxy2:~$
-asvpg@vm-haproxy2:~$ sudo systemctl status haproxy.service
+asvpg@haproxynode:~$ sudo systemctl status haproxy.service
 ● haproxy.service - HAProxy Load Balancer
      Loaded: loaded (/usr/lib/systemd/system/haproxy.service; enabled; preset: enabled)
-     Active: active (running) since Sun 2026-08-16 10:26:42 UTC; 28s ago
+     Active: active (running) since Mon 2026-08-17 16:11:52 UTC; 8s ago
        Docs: man:haproxy(1)
              file:/usr/share/doc/haproxy/configuration.txt.gz
-   Main PID: 7747 (haproxy)
+   Main PID: 1381 (haproxy)
      Status: "Ready."
       Tasks: 3 (limit: 2313)
-     Memory: 39.1M (peak: 39.6M)
-        CPU: 147ms
+     Memory: 39.1M (peak: 39.4M)
+        CPU: 109ms
      CGroup: /system.slice/haproxy.service
-             ├─7747 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
-             └─7751 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             ├─1381 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+             └─1385 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
 
-Aug 16 10:26:42 haproxynode haproxy[7747]: [WARNING]  (7747) : config : proxy 'postgres_read' uses http-check rules wit>
-Aug 16 10:26:42 haproxynode haproxy[7747]: [WARNING]  (7747) : config : missing timeouts for proxy 'postgres_read'.
-Aug 16 10:26:42 haproxynode haproxy[7747]:    | While not properly invalid, you will certainly encounter various proble>
-Aug 16 10:26:42 haproxynode haproxy[7747]:    | with such a configuration. To fix this, please ensure that all following
-Aug 16 10:26:42 haproxynode haproxy[7747]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
-Aug 16 10:26:42 haproxynode haproxy[7747]: [NOTICE]   (7747) : New worker (7751) forked
-Aug 16 10:26:42 haproxynode haproxy[7747]: [NOTICE]   (7747) : Loading success.
-Aug 16 10:26:42 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
-Aug 16 10:26:43 haproxynode haproxy[7751]: [WARNING]  (7751) : Server postgres_write/pgsql1 is DOWN, reason: Layer7 wro>
-Aug 16 10:26:44 haproxynode haproxy[7751]: [WARNING]  (7751) : Server postgres_write/pgsql2 is DOWN, reason: Layer7 wro>
+Aug 17 16:11:52 haproxynode haproxy[1381]: [WARNING]  (1381) : config : proxy 'postgres_read' uses http-check rules wit>
+Aug 17 16:11:52 haproxynode haproxy[1381]: [WARNING]  (1381) : config : missing timeouts for proxy 'postgres_read'.
+Aug 17 16:11:52 haproxynode haproxy[1381]:    | While not properly invalid, you will certainly encounter various proble>
+Aug 17 16:11:52 haproxynode haproxy[1381]:    | with such a configuration. To fix this, please ensure that all following
+Aug 17 16:11:52 haproxynode haproxy[1381]:    | timeouts are set to a non-zero value: 'client', 'connect', 'server'.
+Aug 17 16:11:52 haproxynode haproxy[1381]: [NOTICE]   (1381) : New worker (1385) forked
+Aug 17 16:11:52 haproxynode haproxy[1381]: [NOTICE]   (1381) : Loading success.
+Aug 17 16:11:52 haproxynode systemd[1]: Started haproxy.service - HAProxy Load Balancer.
+Aug 17 16:11:53 haproxynode haproxy[1385]: [WARNING]  (1385) : Server postgres_write/vm-pg2 is DOWN, reason: Layer7 wro>
+Aug 17 16:11:55 haproxynode haproxy[1385]: [WARNING]  (1385) : Server postgres_write/vm-pg3 is DOWN, reason: Layer7 wro>
 asvpg@vm-haproxy2:~$
 
 --WARNING для нод pgsql1 и pgsql2 логичны, т.к. это реплики.
 ```
 
 ####
-Проверим подключение через прокси. Указываем порт 5432, а прокси уже перенаправляет подключение через 6432 
+Проверим подключение через прокси. Указываем порт 5433, а прокси уже перенаправляет подключение через 6432 
 ####
 ```sh
-asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5432
+asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5433
 Password for user postgres:
 psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
 WARNING: psql major version 16, server major version 17.
@@ -5399,7 +5407,7 @@ thai=# \dt+ book.*
 
 thai=#
 
-asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5432
+asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5433
 Password for user postgres:
 psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
 WARNING: psql major version 16, server major version 17.
@@ -5527,6 +5535,26 @@ thai=# select pg_is_in_recovery();
  pg_is_in_recovery
 -------------------
  f
+(1 row)
+
+thai=#
+```
+
+####
+Проверка, что попадаем на реплику:
+####
+```sh
+asvpg@haproxynode:~$ psql -h localhost -d thai -U postgres -p 5434
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ t
 (1 row)
 
 thai=#
