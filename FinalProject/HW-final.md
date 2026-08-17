@@ -6934,10 +6934,10 @@ asvpg@vm-pg3:~$
 ```
 
 ###
-Проверим подключение через прокси. Указываем порт 5432, а прокси уже перенаправляет подключение через 6432 
+Проверим подключение через прокси. Указываем порт 5433, а прокси уже перенаправляет подключение через 6432 
 ###
 ```sh
-asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5432
+asvpg@vm-haproxy1:~$ psql -h localhost -d thai -U postgres -p 5433
 Password for user postgres:
 psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
 WARNING: psql major version 16, server major version 17.
@@ -6962,7 +6962,7 @@ thai=# \dt+ book.*
 
 thai=#
 
-asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5432
+asvpg@vm-haproxy2:~$ psql -h localhost -d thai -U postgres -p 5433
 Password for user postgres:
 psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
 WARNING: psql major version 16, server major version 17.
@@ -7090,6 +7090,26 @@ thai=# select pg_is_in_recovery();
  pg_is_in_recovery
 -------------------
  f
+(1 row)
+
+thai=#
+```
+
+####
+Проверка, что попадаем на реплику:
+####
+```sh
+asvpg@haproxynode:~$ psql -h localhost -d thai -U postgres -p 5434
+Password for user postgres:
+psql (16.14 (Ubuntu 16.14-0ubuntu0.24.04.1), server 17.11 (Ubuntu 17.11-1.pgdg24.04+2))
+WARNING: psql major version 16, server major version 17.
+         Some psql features might not work.
+Type "help" for help.
+
+thai=# select pg_is_in_recovery();
+ pg_is_in_recovery
+-------------------
+ t
 (1 row)
 
 thai=#
